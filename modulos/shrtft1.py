@@ -1,55 +1,57 @@
-import numpy as np
 import streamlit as st
+from modulos.utilitarios import sanitizar_coluna, calcular_estatisticas, avaliar_status, interpretar_status
 
 def analisar(df, modelo, combustivel, valores_ideais):
-    col = 'SHRTFT1(%)'
+    """
+    Analisa a coluna SHRTFT1(%) do DataFrame:
+    - Limpeza dos dados
+    - Cálculo de estatísticas
+    - Comparação com valores ideais
+    """
+    coluna = 'SHRTFT1(%)'
 
-    if col not in df.columns:
-        return {
-            "status": "erro",
-            "titulo": "SHRTFT1(%)",
-            "mensagem": f"Coluna '{col}' não encontrada no CSV.",
-            "valores": {}
-        }
-
-    serie = df[col].dropna()
+    # Sanitiza a coluna antes de qualquer cálculo
+    serie = sanitizar_coluna(df, coluna)
     if serie.empty:
         return {
             "status": "erro",
-            "titulo": "SHRTFT1(%)",
-            "mensagem": f"Sem dados válidos para '{col}'.",
+            "titulo": coluna,
+            "mensagem": f"Sem dados válidos para '{coluna}'.",
             "valores": {}
         }
 
-    media = np.mean(serie)
-    minimo = np.min(serie)
-    maximo = np.max(serie)
+    # Calcula estatísticas básicas
+    estatisticas = calcular_estatisticas(serie)
 
-    faixa_ideal = {"min": -100, "max": 100}
+    # Busca faixa ideal no JSON de valores
+    faixa_ideal = {"min": -100, "max": 100}  # fallback
     try:
-        faixa_ideal = valores_ideais[modelo][combustivel].get("SHRTFT1pct", faixa_ideal)
-    except KeyError:
+        faixa = valores_ideais.get(modelo.lower(), {}).get(combustivel.lower(), {}).get("SHRTFT1pct")
+        if faixa and isinstance(faixa, list) and len(faixa) == 2:
+            faixa_ideal = {"min": faixa[0], "max": faixa[1]}
+    except Exception:
         pass
 
-    status = "OK" if faixa_ideal["min"] <= media <= faixa_ideal["max"] else "Alerta"
-    mensagem = "Curto prazo de ajuste de combustível dentro dos padrões." if status == "OK" \
-        else "Ajuste de combustível em curto prazo fora da faixa ideal. Verifique sensores ou mistura."
+    # Avalia status com base na média
+    status = avaliar_status(estatisticas["média"], faixa_ideal)
+    mensagem = interpretar_status(coluna, status)
 
     return {
         "status": status,
-        "titulo": "SHRTFT1(%)",
+        "titulo": coluna,
         "mensagem": mensagem,
         "valores": {
-            "média": round(media, 2),
-            "mínimo": round(minimo, 2),
-            "máximo": round(maximo, 2),
+            **estatisticas,
             "faixa_ideal": faixa_ideal
         }
     }
 
-def exibir(resultado):
+def exibir(resultado: dict):
+    """
+    Exibe o resultado no Streamlit
+    """
     st.markdown(f"### 🔍 {resultado['titulo']}")
-    
+
     if resultado["status"] == "erro":
         st.error(resultado["mensagem"])
         return
@@ -59,7 +61,12 @@ def exibir(resultado):
     col2.metric("Mínimo", f"{resultado['valores']['mínimo']}%")
     col3.metric("Máximo", f"{resultado['valores']['máximo']}%")
 
+    # Exibe status interpretativo
     if resultado["status"] == "OK":
         st.success(resultado["mensagem"])
     else:
         st.warning(f"⚠️ {resultado['mensagem']}")
+
+    # Mostra faixa ideal
+    faixa = resultado["valores"]["faixa_ideal"]
+    st.caption(f"Faixa ideal: {faixa['min']}% a {faixa['max']}%")
