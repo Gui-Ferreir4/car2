@@ -21,6 +21,12 @@ def analisar(df, modelo, combustivel, valores_ideais):
             "valores": {}
         }
 
+    # Normaliza ENGI_IDLE para 0/1
+    df = df.copy()
+    df["ENGI_IDLE"] = df["ENGI_IDLE"].replace({
+        "Sim": 1, "Não": 0, "Nao": 0, "nao": 0, "não": 0
+    }).fillna(0).astype(int)
+    
     # Filtra somente registros em marcha lenta (ENGI_IDLE == 1)
     df_idle = df[df["ENGI_IDLE"] == 1]
     if df_idle.empty:
