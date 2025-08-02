@@ -1,0 +1,36 @@
+{
+  "ford fiesta 2007 1.6": {
+    "gasolina": {
+      "AF_RATIO": [14.2, 14.8],
+      "SHRTFT1pct": [-5.0, 5.0],
+      "LONGFT1pct": [-10.0, 10.0],
+      "FUELPW": [2.0, 8.0],              
+      "FUELLVL": [10, 100],             
+      "LOAD_OBDII": [10, 90],           
+      "ECT_GAUGE": [80, 105],           
+      "IAT": [15, 45],                  
+      "O2S11_V": [0.1, 0.9],            
+      "LMD_EGO1": [0.85, 1.15],         
+      "MAP_OBDII": [20, 110],           
+      "BARO": [90, 110],                
+      "TP_OBDII": [10, 80],             
+      "SPARKADV": [5, 40]               
+    },
+    "etanol": {
+      "AF_RATIO": [8.8, 9.5],
+      "SHRTFT1pct": [-7.0, 7.0],
+      "LONGFT1pct": [-12.0, 12.0],
+      "FUELPW": [2.5, 9.0],
+      "FUELLVL": [10, 100],
+      "LOAD_OBDII": [10, 90],
+      "ECT_GAUGE": [80, 105],
+      "IAT": [15, 45],
+      "O2S11_V": [0.1, 0.9],
+      "LMD_EGO1": [0.85, 1.15],
+      "MAP_OBDII": [20, 110],
+      "BARO": [90, 110],
+      "TP_OBDII": [10, 80],
+      "SPARKADV": [5, 40]
+    }
+  }
+}
