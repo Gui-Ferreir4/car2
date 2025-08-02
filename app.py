@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import json
-from modulos import shrtft1, longft1, ect_gauge  # Módulos de análise prontos
+from modulos import shrtft1, longft1, ect_gauge, fuellvl  # Módulos de análise prontos
 
 
 # --- Configuração inicial ---
@@ -41,7 +41,7 @@ except Exception as e:
 
 # --- Executar análises ---
 st.header("3. Análises de Sensores")
-modulos_analise = [shrtft1, longft1, ect_gauge]  # Lista de módulos ativos
+modulos_analise = [shrtft1, longft1, ect_gauge, fuellvl]  # Lista de módulos ativos
 
 for modulo in modulos_analise:
     with st.expander(f"🔎 {modulo.__name__.split('.')[-1].upper()}"):
@@ -49,4 +49,5 @@ for modulo in modulos_analise:
         modulo.exibir(resultado)
 
 st.success("✅ Análise concluída.")
+
 
