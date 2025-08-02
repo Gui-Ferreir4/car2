@@ -1,6 +1,8 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
+import numpy as np
+
+VOLUME_TANQUE = 55.0  # litros
 
 def encontrar_coluna(df, nomes_possiveis):
     for nome in nomes_possiveis:
@@ -34,20 +36,31 @@ def analisar(df, modelo, combustivel, valores_ideais):
             "valores": {}
         }
 
-    coluna_odometer = encontrar_coluna(df, ["ODOMETER(km)", "odometer", "odometer_km"])
-    if coluna_odometer is None:
+    coluna_tempo = encontrar_coluna(df, ["time(ms)", "TIME(ms)", "time"])
+    if coluna_tempo is None:
         return {
             "status": "erro",
             "titulo": "Nível de Combustível",
-            "mensagem": "Coluna ODOMETER(km) não encontrada para cálculo de consumo.",
+            "mensagem": "Coluna de tempo não encontrada para análise.",
             "valores": {}
         }
 
+    coluna_odometro = encontrar_coluna(df, ["ODOMETER(km)", "odometer", "odometer_km", "TRIP_ODOM(km)"])
+    if coluna_odometro is None:
+        return {
+            "status": "erro",
+            "titulo": "Nível de Combustível",
+            "mensagem": "Coluna de odômetro não encontrada para cálculo de consumo.",
+            "valores": {}
+        }
+
+    # Sanitiza as colunas
     fuel = sanitizar_coluna(df, coluna_fuel)
     speed = sanitizar_coluna(df, coluna_velocidade)
-    odometer = sanitizar_coluna(df, coluna_odometer)
+    tempo = sanitizar_coluna(df, coluna_tempo)
+    odometro = sanitizar_coluna(df, coluna_odometro)
 
-    if fuel.empty or speed.empty or odometer.empty:
+    if fuel.empty or speed.empty or tempo.empty or odometro.empty:
         return {
             "status": "erro",
             "titulo": "Nível de Combustível",
@@ -55,51 +68,65 @@ def analisar(df, modelo, combustivel, valores_ideais):
             "valores": {}
         }
 
-    # Filtra registros com velocidade zero e combustível válido para início e fim
-    df_valido = df[(df[coluna_velocidade] == 0) & (df[coluna_fuel].notna())]
+    # Filtra dados com velocidade zero (veículo parado)
+    df_parado = df[(df[coluna_velocidade] == 0) & (df[coluna_fuel].notna()) & (df[coluna_tempo].notna())]
 
-    janela_inicial = df_valido.head(10)
-    janela_final = df_valido.tail(10)
+    if df_parado.empty:
+        return {
+            "status": "erro",
+            "titulo": "Nível de Combustível",
+            "mensagem": "Não há registros com velocidade zero e nível de combustível válido para análise.",
+            "valores": {}
+        }
 
-    fuel_inicio = sanitizar_coluna(janela_inicial, coluna_fuel)
-    media_inicio = fuel_inicio.mean() if not fuel_inicio.empty else float('nan')
+    tempo_min = df_parado[coluna_tempo].min()
+    tempo_max = df_parado[coluna_tempo].max()
+    intervalo = tempo_max - tempo_min
+    janela_tempo = intervalo * 0.05  # 5% do intervalo total
 
-    fuel_fim = sanitizar_coluna(janela_final, coluna_fuel)
-    media_fim = fuel_fim.mean() if not fuel_fim.empty else float('nan')
+    # Janela inicial: registros no primeiro 5% do tempo
+    janela_inicial = df_parado[df_parado[coluna_tempo] <= (tempo_min + janela_tempo)]
+    # Janela final: registros no último 5% do tempo
+    janela_final = df_parado[df_parado[coluna_tempo] >= (tempo_max - janela_tempo)]
 
-    capacidade_tanque = 55.0  # litros
+    # Calcula médias do nível combustível nessas janelas
+    media_inicio = sanitizar_coluna(janela_inicial, coluna_fuel).mean()
+    media_fim = sanitizar_coluna(janela_final, coluna_fuel).mean()
 
-    if np.isnan(media_inicio) or np.isnan(media_fim):
+    # Calcula diferença em litros
+    if pd.isna(media_inicio) or pd.isna(media_fim):
         diferenca_litros = np.nan
     else:
-        diferenca_percent = media_inicio - media_fim
-        diferenca_litros = (diferenca_percent / 100) * capacidade_tanque
+        diferenca_pct = media_inicio - media_fim
+        diferenca_litros = (diferenca_pct / 100) * VOLUME_TANQUE
         if diferenca_litros < 0:
-            # Possível reabastecimento ou dados inconsistentes
+            # Possível reabastecimento ou erro
             diferenca_litros = np.nan
 
-    odometro_inicio = odometer.iloc[0]
-    odometro_fim = odometer.iloc[-1]
+    # Calcula distância rodada
+    odometro_inicio = odometro.iloc[0]
+    odometro_fim = odometro.iloc[-1]
     km_rodados = odometro_fim - odometro_inicio if pd.notna(odometro_inicio) and pd.notna(odometro_fim) else np.nan
     if km_rodados < 0:
-        km_rodados = np.nan  # dados inconsistentes
+        km_rodados = np.nan
 
+    # Calcula consumo médio km/l
     consumo = km_rodados / diferenca_litros if (diferenca_litros and diferenca_litros > 0 and km_rodados and km_rodados > 0) else np.nan
 
-    if np.isnan(media_inicio) or np.isnan(media_fim):
+    # Monta mensagens e status
+    if pd.isna(media_inicio) or pd.isna(media_fim):
         status = "alerta"
-        mensagem = "Dados insuficientes para análise do nível de combustível no início e no fim da viagem."
-    elif np.isnan(consumo):
+        mensagem = "Dados insuficientes para análise do nível de combustível no início e fim da viagem."
+    elif pd.isna(consumo):
         status = "alerta"
         mensagem = "Não foi possível calcular o consumo devido a dados inconsistentes."
     else:
         status = "OK"
         mensagem = (
-            f"Nível de combustível no início: {media_inicio:.1f}% | "
-            f"no fim: {media_fim:.1f}%\n"
+            f"Nível inicial: {media_inicio:.1f}% | Nível final: {media_fim:.1f}%\n"
             f"Combustível consumido: {diferenca_litros:.2f} litros\n"
             f"Distância percorrida: {km_rodados:.2f} km\n"
-            f"Consumo médio calculado: {consumo:.2f} km/l"
+            f"Consumo médio: {consumo:.2f} km/l"
         )
 
     return {
@@ -115,8 +142,7 @@ def analisar(df, modelo, combustivel, valores_ideais):
         }
     }
 
-
-def exibir(resultado: dict):
+def exibir(resultado):
     st.markdown(f"### ⛽ {resultado['titulo']}")
 
     if resultado["status"] == "erro":
@@ -135,17 +161,17 @@ def exibir(resultado: dict):
     col2.metric("Nível médio final (%)", f"{valores.get('media_fim_pct', 0):.1f}%")
 
     col3, col4 = st.columns(2)
-    if valores.get("diferenca_litros") is not None and not (valores["diferenca_litros"] != valores["diferenca_litros"]):  # isnan check
+    if valores.get("diferenca_litros") is not None and not pd.isna(valores["diferenca_litros"]):
         col3.metric("Combustível consumido (L)", f"{valores['diferenca_litros']:.2f}")
     else:
         col3.metric("Combustível consumido (L)", "N/A")
 
-    if valores.get("km_rodados") is not None and not (valores["km_rodados"] != valores["km_rodados"]):
+    if valores.get("km_rodados") is not None and not pd.isna(valores["km_rodados"]):
         col4.metric("Distância percorrida (km)", f"{valores['km_rodados']:.2f}")
     else:
         col4.metric("Distância percorrida (km)", "N/A")
 
-    if valores.get("consumo_kml") is not None and not (valores["consumo_kml"] != valores["consumo_kml"]):
+    if valores.get("consumo_kml") is not None and not pd.isna(valores["consumo_kml"]):
         st.metric("Consumo médio (km/L)", f"{valores['consumo_kml']:.2f}")
     else:
         st.metric("Consumo médio (km/L)", "N/A")
