@@ -48,18 +48,14 @@ def analisar(df, modelo, combustivel, valores_ideais):
         }
 
     # Define janela inicial: registros do início com velocidade zero
-    janela_inicial = df[(speed == 0)].head(10)
+    janela_inicial = df[df[coluna_velocidade] == 0].head(10)
     fuel_inicio = sanitizar_coluna(janela_inicial, coluna_fuel)
-    media_inicio = np.nan
-    if not fuel_inicio.empty:
-        media_inicio = fuel_inicio.mean()
-
+    media_inicio = fuel_inicio.mean() if not fuel_inicio.empty else float('nan')
+    
     # Define janela final: registros do fim com velocidade zero
-    janela_final = df[(speed == 0)].tail(10)
+    janela_final = df[df[coluna_velocidade] == 0].tail(10)
     fuel_fim = sanitizar_coluna(janela_final, coluna_fuel)
-    media_fim = np.nan
-    if not fuel_fim.empty:
-        media_fim = fuel_fim.mean()
+    media_fim = fuel_fim.mean() if not fuel_fim.empty else float('nan')
 
     # Calcula diferença em litros
     capacidade_tanque = 55.0  # litros
