@@ -5,7 +5,6 @@ import numpy as np
 VOLUME_TANQUE = 55.0  # litros
 
 def analisar(df, modelo, combustivel, valores_ideais):
-    # Verifica colunas necessárias
     if "FUELLVL(%)" not in df.columns:
         return {
             "status": "erro",
@@ -13,6 +12,7 @@ def analisar(df, modelo, combustivel, valores_ideais):
             "mensagem": "Coluna 'FUELLVL(%)' não encontrada no arquivo.",
             "valores": {}
         }
+
     if "ENGI_IDLE" not in df.columns:
         return {
             "status": "erro",
@@ -21,13 +21,15 @@ def analisar(df, modelo, combustivel, valores_ideais):
             "valores": {}
         }
 
-    # Normaliza ENGI_IDLE para 0/1
     df = df.copy()
+
+    # Normaliza ENGI_IDLE para 0/1 com tratamento robusto
     df["ENGI_IDLE"] = df["ENGI_IDLE"].replace({
         "Sim": 1, "Não": 0, "Nao": 0, "nao": 0, "não": 0
-    }).fillna(0).astype(int)
-    
-    # Filtra somente registros em marcha lenta (ENGI_IDLE == 1)
+    })
+    df["ENGI_IDLE"] = pd.to_numeric(df["ENGI_IDLE"], errors='coerce').fillna(0).astype(int)
+
+    # Filtra registros em marcha lenta (ENGI_IDLE == 1)
     df_idle = df[df["ENGI_IDLE"] == 1]
     if df_idle.empty:
         return {
@@ -37,10 +39,10 @@ def analisar(df, modelo, combustivel, valores_ideais):
             "valores": {}
         }
 
-    # Sanitiza coluna de combustível
+    # Converte coluna de combustível para numérico, substituindo "-" por NaN
     df_idle["FUELLVL(%)"] = pd.to_numeric(df_idle["FUELLVL(%)"].replace("-", np.nan), errors='coerce')
 
-    # Remove registros inválidos em FUELLVL(%)
+    # Remove registros inválidos em combustível
     df_idle = df_idle.dropna(subset=["FUELLVL(%)"])
     if df_idle.empty:
         return {
@@ -50,13 +52,13 @@ def analisar(df, modelo, combustivel, valores_ideais):
             "valores": {}
         }
 
-    # Tempo total da marcha lenta
+    # Calcula tempo total em ms da marcha lenta
     tempo_min = df_idle["time(ms)"].min()
     tempo_max = df_idle["time(ms)"].max()
     intervalo = tempo_max - tempo_min
     janela_tempo = intervalo * 0.05  # 5% do tempo total
 
-    # Janela inicial e final de 5% do tempo da marcha lenta
+    # Define janela inicial e final
     janela_inicial = df_idle[df_idle["time(ms)"] <= tempo_min + janela_tempo]
     janela_final = df_idle[df_idle["time(ms)"] >= tempo_max - janela_tempo]
 
@@ -69,19 +71,19 @@ def analisar(df, modelo, combustivel, valores_ideais):
 
     diferenca_litros = consumo_pct / 100.0 * VOLUME_TANQUE
 
-    # Calcula distância total se TRIP_ODOM(km) disponível
+    # Calcula distância total, se disponível
     distancia = None
     if "TRIP_ODOM(km)" in df.columns:
         odometro = pd.to_numeric(df["TRIP_ODOM(km)"].replace("-", np.nan), errors='coerce').dropna()
         if not odometro.empty:
             distancia = odometro.max() - odometro.min()
 
-    # Consumo km/L
+    # Calcula consumo km/l
     consumo_kml = None
-    if distancia and diferenca_litros > 0:
+    if distancia is not None and diferenca_litros > 0:
         consumo_kml = distancia / diferenca_litros
 
-    # Monta mensagem
+    # Monta mensagem para exibição
     mensagem = (
         f"Nível médio inicial: {media_inicio:.2f}%\n"
         f"Nível médio final: {media_fim:.2f}%\n"
