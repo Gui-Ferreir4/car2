@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import json
-from modulos import shrtft1, longft1  # Módulos de análise prontos
+from modulos import shrtft1, longft1, ect_gauge  # Módulos de análise prontos
+
 
 # --- Configuração inicial ---
 st.set_page_config(page_title="Analisador de Dados OBD", layout="wide")
@@ -40,7 +41,7 @@ except Exception as e:
 
 # --- Executar análises ---
 st.header("3. Análises de Sensores")
-modulos_analise = [shrtft1, longft1]  # Lista de módulos ativos
+modulos_analise = [shrtft1, longft1, ect_gauge]  # Lista de módulos ativos
 
 for modulo in modulos_analise:
     with st.expander(f"🔎 {modulo.__name__.split('.')[-1].upper()}"):
@@ -48,3 +49,4 @@ for modulo in modulos_analise:
         modulo.exibir(resultado)
 
 st.success("✅ Análise concluída.")
+
