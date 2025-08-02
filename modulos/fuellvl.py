@@ -1,88 +1,91 @@
 import streamlit as st
 import numpy as np
-from modulos.utilitarios import sanitizar_coluna
+import pandas as pd
+
+def encontrar_coluna(df, nomes_possiveis):
+    for nome in nomes_possiveis:
+        if nome in df.columns:
+            return nome
+    return None
+
+def sanitizar_coluna(df, coluna):
+    if coluna not in df.columns:
+        return pd.Series(dtype=float)
+    serie = df[coluna].replace(["-", "NA", "NaN", "nan", None], pd.NA)
+    serie = pd.to_numeric(serie, errors="coerce")
+    return serie.dropna()
 
 def analisar(df, modelo, combustivel, valores_ideais):
-    coluna_fuel = "FUELLVL(%)"
-    coluna_velocidade = None
-
-    # Detecta coluna de velocidade (tentando colunas comuns)
-    for c in ["VSS(km/h)", "IC_SPDMTR(km/h)", "speed"]:
-        if c in df.columns:
-            coluna_velocidade = c
-            break
-
-    if coluna_velocidade is None:
+    coluna_fuel = encontrar_coluna(df, ["FUELLVL(%)", "FUEL LVL(%)", "FuelLevel", "Fuel Level (%)"])
+    if coluna_fuel is None:
         return {
             "status": "erro",
-            "titulo": coluna_fuel,
-            "mensagem": "Coluna de velocidade não encontrada para análise de nível de combustível.",
+            "titulo": "Nível de Combustível",
+            "mensagem": "Coluna de nível de combustível não encontrada.",
             "valores": {}
         }
 
-    # Sanitiza as colunas importantes
-    fuel = sanitizar_coluna(df, coluna_fuel)
-    speed = sanitizar_coluna(df, coluna_velocidade)
-    odometer_col = None
-    for c in ["ODOMETER(km)", "odometer", "odometer_km"]:
-        if c in df.columns:
-            odometer_col = c
-            break
-
-    if odometer_col is None:
+    coluna_velocidade = encontrar_coluna(df, ["VSS(km/h)", "IC_SPDMTR(km/h)", "speed"])
+    if coluna_velocidade is None:
         return {
             "status": "erro",
-            "titulo": coluna_fuel,
+            "titulo": "Nível de Combustível",
+            "mensagem": "Coluna de velocidade não encontrada para análise.",
+            "valores": {}
+        }
+
+    coluna_odometer = encontrar_coluna(df, ["ODOMETER(km)", "odometer", "odometer_km"])
+    if coluna_odometer is None:
+        return {
+            "status": "erro",
+            "titulo": "Nível de Combustível",
             "mensagem": "Coluna ODOMETER(km) não encontrada para cálculo de consumo.",
             "valores": {}
         }
 
-    odometer = sanitizar_coluna(df, odometer_col)
+    fuel = sanitizar_coluna(df, coluna_fuel)
+    speed = sanitizar_coluna(df, coluna_velocidade)
+    odometer = sanitizar_coluna(df, coluna_odometer)
 
     if fuel.empty or speed.empty or odometer.empty:
         return {
             "status": "erro",
-            "titulo": coluna_fuel,
+            "titulo": "Nível de Combustível",
             "mensagem": "Dados insuficientes para análise.",
             "valores": {}
         }
 
-    # Define janela inicial: registros do início com velocidade zero
-    janela_inicial = df[df[coluna_velocidade] == 0].head(10)
+    # Filtra registros com velocidade zero e combustível válido para início e fim
+    df_valido = df[(df[coluna_velocidade] == 0) & (df[coluna_fuel].notna())]
+
+    janela_inicial = df_valido.head(10)
+    janela_final = df_valido.tail(10)
+
     fuel_inicio = sanitizar_coluna(janela_inicial, coluna_fuel)
     media_inicio = fuel_inicio.mean() if not fuel_inicio.empty else float('nan')
-    
-    # Define janela final: registros do fim com velocidade zero
-    janela_final = df[df[coluna_velocidade] == 0].tail(10)
+
     fuel_fim = sanitizar_coluna(janela_final, coluna_fuel)
     media_fim = fuel_fim.mean() if not fuel_fim.empty else float('nan')
 
-    # Calcula diferença em litros
     capacidade_tanque = 55.0  # litros
+
     if np.isnan(media_inicio) or np.isnan(media_fim):
         diferenca_litros = np.nan
     else:
         diferenca_percent = media_inicio - media_fim
         diferenca_litros = (diferenca_percent / 100) * capacidade_tanque
         if diferenca_litros < 0:
-            # Pode ocorrer caso o tanque tenha sido abastecido durante a viagem
+            # Possível reabastecimento ou dados inconsistentes
             diferenca_litros = np.nan
 
-    # Calcula km rodados
-    km_rodados = np.nan
     odometro_inicio = odometer.iloc[0]
     odometro_fim = odometer.iloc[-1]
-    if not np.isnan(odometro_inicio) and not np.isnan(odometro_fim):
-        km_rodados = odometro_fim - odometro_inicio
-        if km_rodados < 0:
-            km_rodados = np.nan  # erro possível
+    km_rodados = odometro_fim - odometro_inicio if pd.notna(odometro_inicio) and pd.notna(odometro_fim) else np.nan
+    if km_rodados < 0:
+        km_rodados = np.nan  # dados inconsistentes
 
-    # Calcula consumo km/l
-    consumo = np.nan
-    if diferenca_litros and diferenca_litros > 0 and km_rodados and km_rodados > 0:
-        consumo = km_rodados / diferenca_litros
+    consumo = km_rodados / diferenca_litros if (diferenca_litros and diferenca_litros > 0 and km_rodados and km_rodados > 0) else np.nan
 
-    # Define status e mensagens
     if np.isnan(media_inicio) or np.isnan(media_fim):
         status = "alerta"
         mensagem = "Dados insuficientes para análise do nível de combustível no início e no fim da viagem."
