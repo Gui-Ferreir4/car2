@@ -14,7 +14,8 @@
       "TP.OBDII": [0, 30],
       "SPARKADV": [10, 40],
       "LOAD.OBDII": [15, 35],
-      "FUELLVL": [10, 100]
+      "FUELLVL": [10, 100],
+      "consumo_minimo_kml": 10.5
     },
     "etanol": {
       "SHRTFT1pct": [-7, 7],
@@ -30,7 +31,8 @@
       "TP.OBDII": [0, 30],
       "SPARKADV": [10, 38],
       "LOAD.OBDII": [15, 35],
-      "FUELLVL": [10, 100]
+      "FUELLVL": [10, 100],
+      "consumo_minimo_kml": 7.5
     },
     "flex": {
       "SHRTFT1pct": [-6, 6],
@@ -46,7 +48,9 @@
       "TP.OBDII": [0, 30],
       "SPARKADV": [10, 39],
       "LOAD.OBDII": [15, 35],
-      "FUELLVL": [10, 100]
+      "FUELLVL": [10, 100],
+      "consumo_minimo_kml": 9.0
     }
   }
 }
+
