@@ -1,15 +1,16 @@
-import streamlit as st
+# modulos/fuellvl.py
+
 import pandas as pd
 import numpy as np
-
+import streamlit as st
 from modulos.utilitarios import sanitizar_coluna, calcular_estatisticas, avaliar_status
 
-VOLUME_TANQUE = 55.0  # litros
+VOLUME_TANQUE = 55.0  # Litros
 
 def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: dict) -> dict:
     """
-    Analisa consumo de combustível, mistura, e carga do motor.
-    Retorna métricas detalhadas e status de eficiência.
+    Analisa consumo e eficiência de combustível, mistura e comportamento do motor.
+    Retorna dicionário rico em informações para exibição.
     """
     resultado = {
         "status": "OK",
@@ -17,130 +18,143 @@ def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: di
         "valores": {}
     }
 
-    df = df.copy()
+    # --- Sanitizar colunas importantes ---
+    fuellvl = sanitizar_coluna(df, "FUELLVL(%)")
+    trip_odom = sanitizar_coluna(df, "TRIP_ODOM(km)")
+    odometer = sanitizar_coluna(df, "ODOMETER(km)")
+    speed = sanitizar_coluna(df, "IC_SPDMTR(km/h)")
+    engi_idle = df.get("ENGI_IDLE", pd.Series(dtype=str)).astype(str).str.lower()
+    engi_idle = engi_idle.replace({
+        "sim": 1, "não": 0, "nao": 0, "nÃ£o": 0
+    }).astype(int)
 
-    # --- Consumo de combustível ---
+    # Mistura
+    af_ratio = sanitizar_coluna(df, "AF_RATIO(:1)")
+    shrtft1 = sanitizar_coluna(df, "SHRTFT1(%)")
+    longft1 = sanitizar_coluna(df, "LONGFT1(%)")
+    lambda1 = sanitizar_coluna(df, "LAMBDA_1")
+    ego = sanitizar_coluna(df, "LMD_EGO1(:1)")
+
+    # Contexto do motor
+    load = sanitizar_coluna(df, "LOAD.OBDII(%)")
+    tps = sanitizar_coluna(df, "TP.OBDII(%)")
+    ect = sanitizar_coluna(df, "ECT_GAUGE(Â°C)")
+    iat = sanitizar_coluna(df, "IAT(Â°C)")
+    vbat = sanitizar_coluna(df, "VBAT_1(V)")
+
+    # --- Tempo total de viagem ---
+    if "time(ms)" in df.columns:
+        tempo_total_seg = (df["time(ms)"].max() - df["time(ms)"].min()) / 1000.0
+    else:
+        tempo_total_seg = None
+
+    # --- Distância percorrida ---
+    if not trip_odom.empty:
+        distancia_km = trip_odom.max() - trip_odom.min()
+    elif not odometer.empty:
+        distancia_km = odometer.max() - odometer.min()
+    else:
+        distancia_km = None
+
+    # --- Consumo de combustível estimado ---
     consumo_litros = None
-    distancia_km = None
-    consumo_kml = None
-    msg_consumo = ""
+    consumo_pct = None
+    if not fuellvl.empty:
+        inicio = fuellvl.head(10).mean()
+        fim = fuellvl.tail(10).mean()
+        consumo_pct = max(inicio - fim, 0)
+        consumo_litros = round(consumo_pct / 100.0 * VOLUME_TANQUE, 2)
 
-    # Sanitiza colunas principais
-    fuel = sanitizar_coluna(df, "FUELLVL(%)")
-    idle = df.get("ENGI_IDLE")
-    odom = None
-
-    # Detecta colunas de odômetro
-    for col in ["TRIP_ODOM(km)", "TRIP_ODOMETER(km)", "ODOMETER(km)"]:
-        if col in df.columns:
-            odom = sanitizar_coluna(df, col)
-            break
-
-    if not fuel.empty and idle is not None:
-        # Normaliza marcha lenta (Sim/Não, etc.)
-        idle_norm = (
-            idle.astype(str)
-            .str.lower()
-            .replace({
-                "sim": 1, "não": 0, "nao": 0, "n": 0, "s": 1
-            })
-        )
-        idle_norm = pd.to_numeric(idle_norm, errors="coerce").fillna(0).astype(int)
-
-        # Janela inicial e final (5% do tempo total)
-        t = pd.to_numeric(df["time(ms)"], errors="coerce") if "time(ms)" in df.columns else pd.Series(range(len(df)))
-        tempo_total = t.max() - t.min() if not t.empty else len(df)
-        inicio = df[t <= t.min() + 0.05 * tempo_total]
-        fim = df[t >= t.max() - 0.05 * tempo_total]
-
-        # Calcula consumo em litros
-        fuel_inicio = sanitizar_coluna(inicio, "FUELLVL(%)").mean()
-        fuel_fim = sanitizar_coluna(fim, "FUELLVL(%)").mean()
-        if pd.notna(fuel_inicio) and pd.notna(fuel_fim):
-            consumo_pct = max(fuel_inicio - fuel_fim, 0)
-            consumo_litros = round(consumo_pct / 100 * VOLUME_TANQUE, 2)
-
-        # Distância percorrida
-        if odom is not None and not odom.empty:
-            distancia_km = round(odom.max() - odom.min(), 2)
-
-        # Consumo médio km/l
-        if consumo_litros and distancia_km:
-            consumo_kml = round(distancia_km / consumo_litros, 2)
-
-        msg_consumo = (
-            f"Combustível inicial: {fuel_inicio:.2f}% ({fuel_inicio/100*VOLUME_TANQUE:.1f} L) | "
-            f"final: {fuel_fim:.2f}% ({fuel_fim/100*VOLUME_TANQUE:.1f} L) | "
-            f"consumo: {consumo_litros if consumo_litros else 'N/A'} L"
-        )
-
-    resultado["valores"]["consumo_litros"] = consumo_litros
-    resultado["valores"]["distancia_km"] = distancia_km
-    resultado["valores"]["consumo_kml"] = consumo_kml
+    # --- Eficiência km/L ---
+    kml = None
+    if distancia_km and consumo_litros and consumo_litros > 0:
+        kml = round(distancia_km / consumo_litros, 2)
 
     # --- Mistura e correções ---
-    mistura_stats = {}
-    for col in ["AF_RATIO(:1)", "SHRTFT1(%)", "LONGFT1(%)"]:
-        serie = sanitizar_coluna(df, col)
-        if not serie.empty:
-            mistura_stats[col] = calcular_estatisticas(serie)
-    resultado["valores"]["mistura"] = mistura_stats
+    af_stats = calcular_estatisticas(af_ratio)
+    sft_stats = calcular_estatisticas(shrtft1)
+    lft_stats = calcular_estatisticas(longft1)
 
-    # --- Carga e TPS ---
-    carga_stats = {}
-    for col in ["LOAD.OBDII(%)", "TP.OBDII(%)"]:
-        serie = sanitizar_coluna(df, col)
-        if not serie.empty:
-            carga_stats[col] = calcular_estatisticas(serie)
-    resultado["valores"]["carga_tps"] = carga_stats
+    # --- Contexto adicional ---
+    load_stats = calcular_estatisticas(load)
+    tps_stats = calcular_estatisticas(tps)
+    ect_stats = calcular_estatisticas(ect)
+    iat_stats = calcular_estatisticas(iat)
+    vbat_stats = calcular_estatisticas(vbat)
 
-    # --- Avaliação com JSON de valores ideais ---
-    faixa_ideais = valores_ideais.get(modelo, {}).get(combustivel.lower(), {})
-    alertas = []
-
-    if consumo_kml and "consumo_kml_min" in faixa_ideais:
-        if consumo_kml < faixa_ideais["consumo_kml_min"]:
-            resultado["status"] = "alerta"
-            alertas.append(f"Consumo abaixo do esperado ({consumo_kml} km/L)")
-
-    for col, stats in mistura_stats.items():
-        if col in faixa_ideais:
-            status = avaliar_status(stats["média"], faixa_ideais[col])
-            if status != "OK":
+    # --- Avaliação de status geral ---
+    status_msgs = []
+    if kml is not None:
+        faixa = valores_ideais.get(modelo, {}).get(combustivel, {}).get("km_l", {})
+        if faixa:
+            status = avaliar_status(kml, faixa)
+            if status == "Alerta":
+                status_msgs.append(f"Consumo {kml} km/L fora da faixa ideal ({faixa['min']} - {faixa['max']}).")
                 resultado["status"] = "alerta"
-                alertas.append(f"{col} fora da faixa ideal (média {stats['média']})")
 
-    resultado["mensagem"] = msg_consumo + (" | " + " / ".join(alertas) if alertas else "")
+    if not status_msgs:
+        status_msgs.append("Parâmetros de consumo e mistura dentro do esperado.")
+
+    # --- Monta resultado ---
+    resultado["mensagem"] = "\n".join(status_msgs)
+    resultado["valores"] = {
+        "consumo_litros": consumo_litros,
+        "consumo_pct": consumo_pct,
+        "distancia_km": distancia_km,
+        "kml": kml,
+        "tempo_total_seg": tempo_total_seg,
+        "mistura": {
+            "AF_RATIO": af_stats,
+            "SHRTFT1": sft_stats,
+            "LONGFT1": lft_stats,
+            "Lambda": calcular_estatisticas(lambda1),
+            "EGO": calcular_estatisticas(ego)
+        },
+        "motor": {
+            "LOAD": load_stats,
+            "TPS": tps_stats,
+            "ECT": ect_stats,
+            "IAT": iat_stats,
+            "VBAT": vbat_stats
+        }
+    }
 
     return resultado
 
 
 def exibir(resultado: dict):
     """
-    Exibe os resultados de consumo e eficiência de combustível no Streamlit.
+    Exibe os resultados no Streamlit de forma organizada.
     """
-    st.markdown("## ⛽ Análise de Consumo e Eficiência do Motor")
+    st.subheader("⛽ Análise de Consumo e Eficiência")
 
-    # Bloco principal de métricas
+    valores = resultado.get("valores", {})
+    consumo_litros = valores.get("consumo_litros")
+    distancia_km = valores.get("distancia_km")
+    kml = valores.get("kml")
+
+    # --- Bloco de métricas principais ---
     col1, col2, col3 = st.columns(3)
-    col1.metric("Distância (km)", f"{resultado['valores']['distancia_km'] or 'N/A'}")
-    col2.metric("Consumo (L)", f"{resultado['valores']['consumo_litros'] or 'N/A'}")
-    col3.metric("Média (km/L)", f"{resultado['valores']['consumo_kml'] or 'N/A'}")
+    col1.metric("Distância (km)", f"{distancia_km:.2f}" if distancia_km else "N/A")
+    col2.metric("Consumo (L)", f"{consumo_litros:.2f}" if consumo_litros else "N/A")
+    col3.metric("Consumo Médio (km/L)", f"{kml:.2f}" if kml else "N/A")
 
-    # Mistura
-    st.markdown("### 🔹 Mistura e Correções de Injeção")
-    for col, stats in resultado["valores"]["mistura"].items():
-        st.write(f"**{col}** → média {stats['média']}, min {stats['mínimo']}, máx {stats['máximo']}")
+    # --- Bloco de mistura ---
+    st.markdown("### 🔹 Mistura e Correções de Combustível")
+    mistura = valores.get("mistura", {})
+    for key, stats in mistura.items():
+        st.write(f"**{key}**: {stats}")
 
-    # Carga e TPS
-    st.markdown("### 🔹 Carga e Posição da Borboleta")
-    for col, stats in resultado["valores"]["carga_tps"].items():
-        st.write(f"**{col}** → média {stats['média']}, min {stats['mínimo']}, máx {stats['máximo']}")
+    # --- Bloco de contexto do motor ---
+    st.markdown("### 🔹 Parâmetros do Motor")
+    motor = valores.get("motor", {})
+    for key, stats in motor.items():
+        st.write(f"**{key}**: {stats}")
 
-    # Mensagem final
+    # --- Status e mensagem ---
     if resultado["status"] == "alerta":
-        st.warning(f"⚠️ {resultado['mensagem']}")
+        st.warning("⚠️ " + resultado["mensagem"])
     elif resultado["status"] == "erro":
-        st.error(f"❌ {resultado['mensagem']}")
+        st.error("❌ " + resultado["mensagem"])
     else:
-        st.success(f"✅ {resultado['mensagem']}")
+        st.success("✅ " + resultado["mensagem"])
