@@ -23,10 +23,18 @@ def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: di
     trip_odom = sanitizar_coluna(df, "TRIP_ODOM(km)")
     odometer = sanitizar_coluna(df, "ODOMETER(km)")
     speed = sanitizar_coluna(df, "IC_SPDMTR(km/h)")
-    engi_idle = df.get("ENGI_IDLE", pd.Series(dtype=str)).astype(str).str.lower()
-    engi_idle = engi_idle.replace({
-        "sim": 1, "não": 0, "nao": 0, "nÃ£o": 0
-    }).astype(int)
+    engi_idle = (
+        df.get("ENGI_IDLE", pd.Series(dtype=str))
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .replace({
+            "sim": 1, "não": 0, "nao": 0, "nÃ£o": 0,
+            "yes": 1, "no": 0, "-": 0, "": 0
+        })
+    )
+
+engi_idle = pd.to_numeric(engi_idle, errors="coerce").fillna(0).astype(int)
 
     # Mistura
     af_ratio = sanitizar_coluna(df, "AF_RATIO(:1)")
