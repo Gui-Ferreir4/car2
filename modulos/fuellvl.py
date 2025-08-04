@@ -2,168 +2,145 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+from modulos.utilitarios import sanitizar_coluna, calcular_estatisticas, avaliar_status
+
 VOLUME_TANQUE = 55.0  # litros
 
-def analisar(df, modelo, combustivel, valores_ideais):
-    if "FUELLVL(%)" not in df.columns:
-        return {
-            "status": "erro",
-            "titulo": "Nível de Combustível",
-            "mensagem": "Coluna 'FUELLVL(%)' não encontrada no arquivo.",
-            "valores": {}
-        }
-
-    if "ENGI_IDLE" not in df.columns:
-        return {
-            "status": "erro",
-            "titulo": "Nível de Combustível",
-            "mensagem": "Coluna 'ENGI_IDLE' não encontrada no arquivo.",
-            "valores": {}
-        }
+def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: dict) -> dict:
+    """
+    Analisa consumo de combustível, mistura, e carga do motor.
+    Retorna métricas detalhadas e status de eficiência.
+    """
+    resultado = {
+        "status": "OK",
+        "mensagem": "",
+        "valores": {}
+    }
 
     df = df.copy()
 
-    # Normaliza ENGI_IDLE para 0/1 com tratamento robusto
-    df["ENGI_IDLE"] = df["ENGI_IDLE"].replace({
-        "Sim": 1, "Não": 0, "Nao": 0, "nao": 0, "não": 0
-    })
-    df["ENGI_IDLE"] = pd.to_numeric(df["ENGI_IDLE"], errors='coerce').fillna(0).astype(int)
-
-    # Filtra registros em marcha lenta (ENGI_IDLE == 1)
-    df_idle = df[df["ENGI_IDLE"] == 1]
-    if df_idle.empty:
-        return {
-            "status": "alerta",
-            "titulo": "Nível de Combustível",
-            "mensagem": "Não foram encontrados registros em marcha lenta (ENGI_IDLE == 1).",
-            "valores": {}
-        }
-
-    # Converte coluna de combustível para numérico, substituindo "-" por NaN
-    df_idle["FUELLVL(%)"] = pd.to_numeric(df_idle["FUELLVL(%)"].replace("-", np.nan), errors='coerce')
-
-    # Remove registros inválidos em combustível
-    df_idle = df_idle.dropna(subset=["FUELLVL(%)"])
-    if df_idle.empty:
-        return {
-            "status": "alerta",
-            "titulo": "Nível de Combustível",
-            "mensagem": "Não foram encontrados registros válidos de nível de combustível em marcha lenta.",
-            "valores": {}
-        }
-
-    # Calcula tempo total em ms da marcha lenta
-    tempo_min = df_idle["time(ms)"].min()
-    tempo_max = df_idle["time(ms)"].max()
-    intervalo = tempo_max - tempo_min
-    janela_tempo = intervalo * 0.05  # 5% do tempo total
-
-    # Define janela inicial e final
-    janela_inicial = df_idle[df_idle["time(ms)"] <= tempo_min + janela_tempo]
-    janela_final = df_idle[df_idle["time(ms)"] >= tempo_max - janela_tempo]
-
-    media_inicio_pct = janela_inicial["FUELLVL(%)"].mean()
-    media_fim_pct = janela_final["FUELLVL(%)"].mean()
-
-    consumo_pct = media_inicio_pct - media_fim_pct
-    if consumo_pct < 0:
-        consumo_pct = 0
-
-    volume_inicio_l = media_inicio_pct / 100.0 * VOLUME_TANQUE
-    volume_fim_l = media_fim_pct / 100.0 * VOLUME_TANQUE
-    consumo_litros = consumo_pct / 100.0 * VOLUME_TANQUE
-
-    # Calcula distância total, se disponível
-    distancia = None
-    if "TRIP_ODOM(km)" in df.columns:
-        odometro = pd.to_numeric(df["TRIP_ODOM(km)"].replace("-", np.nan), errors='coerce').dropna()
-        if not odometro.empty:
-            distancia = odometro.max() - odometro.min()
-
-    # Calcula consumo km/l
+    # --- Consumo de combustível ---
+    consumo_litros = None
+    distancia_km = None
     consumo_kml = None
-    if distancia is not None and consumo_litros > 0:
-        consumo_kml = distancia / consumo_litros
+    msg_consumo = ""
 
-    # Verifica consumo ideal no JSON
-    consumo_ideal_min = None
-    if modelo in valores_ideais:
-        combustivel_info = valores_ideais[modelo].get(combustivel, {})
-        consumo_ideal_min = combustivel_info.get("consumo_minimo_kml")
+    # Sanitiza colunas principais
+    fuel = sanitizar_coluna(df, "FUELLVL(%)")
+    idle = df.get("ENGI_IDLE")
+    odom = None
 
-    alerta_consumo = False
-    if consumo_kml is not None and consumo_ideal_min is not None:
-        if consumo_kml < consumo_ideal_min:
-            alerta_consumo = True
+    # Detecta colunas de odômetro
+    for col in ["TRIP_ODOM(km)", "TRIP_ODOMETER(km)", "ODOMETER(km)"]:
+        if col in df.columns:
+            odom = sanitizar_coluna(df, col)
+            break
 
-    # Monta mensagem para exibição
-    mensagem = (
-        f"Nível médio inicial: {media_inicio_pct:.2f}% ({volume_inicio_l:.2f} litros)\n"
-        f"Nível médio final: {media_fim_pct:.2f}% ({volume_fim_l:.2f} litros)\n"
-        f"Combustível consumido: {consumo_litros:.2f} litros\n"
-    )
-    if distancia is not None:
-        mensagem += f"Distância percorrida: {distancia:.2f} km\n"
-    if consumo_kml is not None:
-        mensagem += f"Consumo médio: {consumo_kml:.2f} km/l\n"
-        if alerta_consumo:
-            mensagem += f"⚠️ Consumo abaixo do esperado para este veículo (mínimo esperado: {consumo_ideal_min:.2f} km/l)\n"
-    else:
-        mensagem += "Consumo médio não calculado devido a dados insuficientes."
+    if not fuel.empty and idle is not None:
+        # Normaliza marcha lenta (Sim/Não, etc.)
+        idle_norm = (
+            idle.astype(str)
+            .str.lower()
+            .replace({
+                "sim": 1, "não": 0, "nao": 0, "n": 0, "s": 1
+            })
+        )
+        idle_norm = pd.to_numeric(idle_norm, errors="coerce").fillna(0).astype(int)
 
-    status = "alerta" if alerta_consumo else ("OK" if consumo_kml is not None else "alerta")
+        # Janela inicial e final (5% do tempo total)
+        t = pd.to_numeric(df["time(ms)"], errors="coerce") if "time(ms)" in df.columns else pd.Series(range(len(df)))
+        tempo_total = t.max() - t.min() if not t.empty else len(df)
+        inicio = df[t <= t.min() + 0.05 * tempo_total]
+        fim = df[t >= t.max() - 0.05 * tempo_total]
 
-    valores = {
-        "media_inicio_pct": media_inicio_pct,
-        "media_fim_pct": media_fim_pct,
-        "volume_inicio_l": volume_inicio_l,
-        "volume_fim_l": volume_fim_l,
-        "consumo_litros": consumo_litros,
-        "distancia_km": distancia,
-        "consumo_kml": consumo_kml,
-        "consumo_ideal_min_kml": consumo_ideal_min,
-        "alerta_consumo": alerta_consumo
-    }
+        # Calcula consumo em litros
+        fuel_inicio = sanitizar_coluna(inicio, "FUELLVL(%)").mean()
+        fuel_fim = sanitizar_coluna(fim, "FUELLVL(%)").mean()
+        if pd.notna(fuel_inicio) and pd.notna(fuel_fim):
+            consumo_pct = max(fuel_inicio - fuel_fim, 0)
+            consumo_litros = round(consumo_pct / 100 * VOLUME_TANQUE, 2)
 
-    return {
-        "status": status,
-        "titulo": "Nível de Combustível",
-        "mensagem": mensagem,
-        "valores": valores
-    }
+        # Distância percorrida
+        if odom is not None and not odom.empty:
+            distancia_km = round(odom.max() - odom.min(), 2)
 
-def exibir(resultado):
-    st.markdown(f"### ⛽ {resultado['titulo']}")
+        # Consumo médio km/l
+        if consumo_litros and distancia_km:
+            consumo_kml = round(distancia_km / consumo_litros, 2)
 
-    if resultado["status"] == "erro":
-        st.error(resultado["mensagem"])
-        return
+        msg_consumo = (
+            f"Combustível inicial: {fuel_inicio:.2f}% ({fuel_inicio/100*VOLUME_TANQUE:.1f} L) | "
+            f"final: {fuel_fim:.2f}% ({fuel_fim/100*VOLUME_TANQUE:.1f} L) | "
+            f"consumo: {consumo_litros if consumo_litros else 'N/A'} L"
+        )
 
+    resultado["valores"]["consumo_litros"] = consumo_litros
+    resultado["valores"]["distancia_km"] = distancia_km
+    resultado["valores"]["consumo_kml"] = consumo_kml
+
+    # --- Mistura e correções ---
+    mistura_stats = {}
+    for col in ["AF_RATIO(:1)", "SHRTFT1(%)", "LONGFT1(%)"]:
+        serie = sanitizar_coluna(df, col)
+        if not serie.empty:
+            mistura_stats[col] = calcular_estatisticas(serie)
+    resultado["valores"]["mistura"] = mistura_stats
+
+    # --- Carga e TPS ---
+    carga_stats = {}
+    for col in ["LOAD.OBDII(%)", "TP.OBDII(%)"]:
+        serie = sanitizar_coluna(df, col)
+        if not serie.empty:
+            carga_stats[col] = calcular_estatisticas(serie)
+    resultado["valores"]["carga_tps"] = carga_stats
+
+    # --- Avaliação com JSON de valores ideais ---
+    faixa_ideais = valores_ideais.get(modelo, {}).get(combustivel.lower(), {})
+    alertas = []
+
+    if consumo_kml and "consumo_kml_min" in faixa_ideais:
+        if consumo_kml < faixa_ideais["consumo_kml_min"]:
+            resultado["status"] = "alerta"
+            alertas.append(f"Consumo abaixo do esperado ({consumo_kml} km/L)")
+
+    for col, stats in mistura_stats.items():
+        if col in faixa_ideais:
+            status = avaliar_status(stats["média"], faixa_ideais[col])
+            if status != "OK":
+                resultado["status"] = "alerta"
+                alertas.append(f"{col} fora da faixa ideal (média {stats['média']})")
+
+    resultado["mensagem"] = msg_consumo + (" | " + " / ".join(alertas) if alertas else "")
+
+    return resultado
+
+
+def exibir(resultado: dict):
+    """
+    Exibe os resultados de consumo e eficiência de combustível no Streamlit.
+    """
+    st.markdown("## ⛽ Análise de Consumo e Eficiência do Motor")
+
+    # Bloco principal de métricas
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Distância (km)", f"{resultado['valores']['distancia_km'] or 'N/A'}")
+    col2.metric("Consumo (L)", f"{resultado['valores']['consumo_litros'] or 'N/A'}")
+    col3.metric("Média (km/L)", f"{resultado['valores']['consumo_kml'] or 'N/A'}")
+
+    # Mistura
+    st.markdown("### 🔹 Mistura e Correções de Injeção")
+    for col, stats in resultado["valores"]["mistura"].items():
+        st.write(f"**{col}** → média {stats['média']}, min {stats['mínimo']}, máx {stats['máximo']}")
+
+    # Carga e TPS
+    st.markdown("### 🔹 Carga e Posição da Borboleta")
+    for col, stats in resultado["valores"]["carga_tps"].items():
+        st.write(f"**{col}** → média {stats['média']}, min {stats['mínimo']}, máx {stats['máximo']}")
+
+    # Mensagem final
     if resultado["status"] == "alerta":
-        st.warning(resultado["mensagem"])
+        st.warning(f"⚠️ {resultado['mensagem']}")
+    elif resultado["status"] == "erro":
+        st.error(f"❌ {resultado['mensagem']}")
     else:
-        st.success(resultado["mensagem"])
-
-    valores = resultado.get("valores", {})
-
-    col1, col2 = st.columns(2)
-    col1.metric("Nível médio inicial (%)", f"{valores.get('media_inicio_pct', 0):.2f}%")
-    col2.metric("Nível médio final (%)", f"{valores.get('media_fim_pct', 0):.2f}%")
-
-    col1.metric("Volume inicial (litros)", f"{valores.get('volume_inicio_l', 0):.2f} L")
-    col2.metric("Volume final (litros)", f"{valores.get('volume_fim_l', 0):.2f} L")
-
-    if valores.get("distancia_km") is not None:
-        st.metric("Distância percorrida (km)", f"{valores['distancia_km']:.2f}")
-    else:
-        st.metric("Distância percorrida (km)", "N/A")
-
-    if valores.get("consumo_litros") is not None:
-        st.metric("Combustível consumido (L)", f"{valores['consumo_litros']:.2f}")
-    else:
-        st.metric("Combustível consumido (L)", "N/A")
-
-    if valores.get("consumo_kml") is not None:
-        st.metric("Consumo médio (km/L)", f"{valores['consumo_kml']:.2f}")
-    else:
-        st.metric("Consumo médio (km/L)", "N/A")
+        st.success(f"✅ {resultado['mensagem']}")
