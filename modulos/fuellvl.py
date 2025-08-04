@@ -34,7 +34,7 @@ def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: di
         })
     )
 
-engi_idle = pd.to_numeric(engi_idle, errors="coerce").fillna(0).astype(int)
+    engi_idle = pd.to_numeric(engi_idle, errors="coerce").fillna(0).astype(int)
 
     # Mistura
     af_ratio = sanitizar_coluna(df, "AF_RATIO(:1)")
