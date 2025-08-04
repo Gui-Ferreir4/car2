@@ -4,7 +4,7 @@ import numpy as np
 from datetime import timedelta
 
 # Importa utilitários já existentes
-from utilitarios import (
+from modulos.utilitarios import (
     sanitizar_coluna,
     calcular_estatisticas,
     avaliar_status,
