@@ -10,8 +10,7 @@ from modulos import (
     fuelpw,           # Tempo de injeção
     af_ego_o2,        # AF_RATIO, LMD_EGO1, O2S11_V
     map_sensor,       # MAP(V) e MAP.OBDII(kPa)
-    spkdur,           # Duração de faísca (SPKDUR_1-4)
-    loop_fuelcorr, # MIXCNT_STAT, LAMBDA_1, OPENLOOP, FUEL_CORR(:1), AF_LEARN
+    spkdur,           # Duração de faísca (SPKDUR_1-4) # MIXCNT_STAT, LAMBDA_1, OPENLOOP, FUEL_CORR(:1), AF_LEARN
     lambda_mixture # MIXCNT_STAT, LAMBDA_1, OPENLOOP, FUEL_CORR(:1), AF_LEARN
 )
 
@@ -63,7 +62,6 @@ modulos_analise = [
     af_ego_o2,
     map_sensor,
     spkdur,
-    loop_fuelcorr,
     lambda_mixture
 ]  # Lista de módulos ativos
 
@@ -73,6 +71,7 @@ for modulo in modulos_analise:
         modulo.exibir(resultado)
 
 st.success("✅ Análise concluída.")
+
 
 
 
