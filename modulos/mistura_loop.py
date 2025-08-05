@@ -36,7 +36,8 @@ def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: di
         openloop_num = openloop_col.astype(str).str.strip().str.lower()
         openloop_num = openloop_num.replace({
             "sim": 1, "não": 0, "nao": 0, "true": 1, "false": 0
-        }).fillna(0).astype(int)
+        })
+        openloop_num = pd.to_numeric(openloop_num, errors='coerce').fillna(0).astype(int)
         closed_loop_pct = round((openloop_num == 0).sum() / len(openloop_num) * 100, 2)
         resultados["closed_loop_%"] = closed_loop_pct
         mensagens.append(f"Closed Loop: {closed_loop_pct}% do tempo")
