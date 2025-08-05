@@ -2,17 +2,17 @@ import streamlit as st
 import pandas as pd
 import json
 from modulos import (
-                    resumo_geral,     # Estatísticas gerais da viagem
-                    shrtft1,          # Correção de combustível curto prazo
-                    longft1,          # Correção de combustível longo prazo
-                    ect_gauge,        # Temperatura do motor
-                    fuellvl,          # Consumo e nível de combustível
-                    fuelpw,           # Tempo de injeção
-                    af_ego_o2,        # AF_RATIO, LMD_EGO1, O2S11_V
-                    map_sensor,       # MAP(V) e MAP.OBDII(kPa)
-                    spkdur,           # Duração de faísca (SPKDUR_1-4) # MIXCNT_STAT, LAMBDA_1, OPENLOOP, FUEL_CORR(:1), AF_LEARN
-                    lambda_mixture    # MIXCNT_STAT, LAMBDA_1, OPENLOOP, FUEL_CORR(:1), AF_LEARN
-                )
+    resumo_geral,
+    fuellvl,
+    shrtft1,
+    longft1,
+    ect_gauge,
+    fuelpw,
+    af_ego_o2,
+    map_sensor,
+    spkdur
+    #loop_fuelcorr
+)
 
 
 # --- Configuração inicial ---
@@ -71,6 +71,7 @@ for modulo in modulos_analise:
         modulo.exibir(resultado)
 
 st.success("✅ Análise concluída.")
+
 
 
 
