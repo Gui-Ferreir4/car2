@@ -1,68 +1,83 @@
-# modulos/correcao_combustivel.py
+# modulos/combustivel_avancado.py
 
 import streamlit as st
-from modulos.utilitarios import sanitizar_coluna, calcular_estatisticas, avaliar_status, interpretar_status
+from modulos.utilitarios import sanitizar_coluna, calcular_estatisticas
 
-# Lista de colunas suportadas neste módulo
-COLUNAS_SUPORTADAS = [
-    "SHRTFT1(%)",
-    "LONGFT1(%)",
-    "AF_RATIO(:1)",
-    "LAMBDA_1",
-    "LMD_EGO1(:1)"
-]
+# Campos de mistura suportados (sem LAMBDA_1)
+CAMPOS_MISTURA = {
+    "SHRTFT1(%)": "Correção de combustível em curto prazo (STFT).",
+    "LONGFT1(%)": "Correção de combustível em longo prazo (LTFT).",
+    "AF_RATIO(:1)": "Relação ar-combustível (AFR) medida pelo sensor.",
+    "LMD_EGO1(:1)": "Lambda estimado pelo sensor O2 pré-catalisador."
+}
 
 def analisar(df, modelo, combustivel, valores_ideais):
     """
-    Analisa todos os parâmetros de mistura (STFT, LTFT, AFR, Lambda, EGO)
-    usando o JSON de valores ideais.
-    Retorna uma lista de resultados por coluna.
+    Analisa parâmetros de mistura com métricas detalhadas:
+    - Estatísticas básicas
+    - Percentual de tempo dentro/fora da faixa
+    - Picos máximos e mínimos
     """
     resultados = []
-
     modelo_key = modelo.lower()
     combustivel_key = combustivel.lower()
     faixas_modelo = valores_ideais.get(modelo_key, {}).get(combustivel_key, {})
 
-    for coluna in COLUNAS_SUPORTADAS:
-        # Sanitiza dados
+    for coluna, descricao in CAMPOS_MISTURA.items():
         serie = sanitizar_coluna(df, coluna)
+
         if serie.empty:
             resultados.append({
                 "status": "erro",
                 "titulo": coluna,
+                "descricao": descricao,
                 "mensagem": f"Sem dados válidos para '{coluna}'.",
                 "valores": {}
             })
             continue
 
-        # Estatísticas
-        estatisticas = calcular_estatisticas(serie)
+        # Estatísticas básicas
+        estat = calcular_estatisticas(serie)
 
-        # Faixa ideal
-        faixa_ideal = {"min": -9999, "max": 9999}  # fallback
+        # Faixa ideal do JSON
         chave_json = (
             coluna.replace("(%)", "pct")
                   .replace("(:1)", "")
                   .replace(".", "_")
                   .replace(":", "")
-        )  # Normaliza o nome para o JSON
-
+        )
         faixa = faixas_modelo.get(chave_json)
+        faixa_ideal = None
         if faixa and isinstance(faixa, list) and len(faixa) == 2:
             faixa_ideal = {"min": faixa[0], "max": faixa[1]}
 
-        # Status com base na média
-        status = avaliar_status(estatisticas["média"], faixa_ideal)
-        mensagem = interpretar_status(coluna, status)
+        # Cálculos avançados: tempo dentro/fora da faixa
+        dentro, abaixo, acima = None, None, None
+        if faixa_ideal:
+            total = len(serie)
+            dentro = ((serie >= faixa_ideal["min"]) & (serie <= faixa_ideal["max"])).sum() / total * 100
+            abaixo = (serie < faixa_ideal["min"]).sum() / total * 100
+            acima = (serie > faixa_ideal["max"]).sum() / total * 100
+            status = "OK" if dentro >= 80 else "Alerta"
+            mensagem = (
+                f"{coluna}: {dentro:.1f}% dentro da faixa "
+                f"({abaixo:.1f}% abaixo, {acima:.1f}% acima)."
+            )
+        else:
+            status = "OK"
+            mensagem = f"{coluna}: média={estat['média']:.2f} (sem faixa definida no JSON)."
 
         resultados.append({
             "status": status,
             "titulo": coluna,
+            "descricao": descricao,
             "mensagem": mensagem,
             "valores": {
-                **estatisticas,
-                "faixa_ideal": faixa_ideal
+                **estat,
+                "faixa_ideal": faixa_ideal,
+                "percentual_dentro": dentro,
+                "percentual_abaixo": abaixo,
+                "percentual_acima": acima
             }
         })
 
@@ -71,26 +86,38 @@ def analisar(df, modelo, combustivel, valores_ideais):
 
 def exibir(resultados: list):
     """
-    Exibe uma lista de resultados no Streamlit em formato uniforme
+    Exibe análise avançada de mistura em Streamlit
     """
-    for resultado in resultados:
-        st.markdown(f"### 🔍 {resultado['titulo']}")
+    for r in resultados:
+        st.markdown(f"### 🔍 {r['titulo']}")
+        st.caption(r["descricao"])
 
-        if resultado["status"] == "erro":
-            st.error(resultado["mensagem"])
+        if r["status"] == "erro":
+            st.error(r["mensagem"])
             continue
 
+        # Bloco de métricas principais
+        estat = r["valores"]
         col1, col2, col3 = st.columns(3)
-        col1.metric("Média", f"{resultado['valores']['média']:.2f}")
-        col2.metric("Mínimo", f"{resultado['valores']['mínimo']:.2f}")
-        col3.metric("Máximo", f"{resultado['valores']['máximo']:.2f}")
+        col1.metric("Média", f"{estat['média']:.2f}")
+        col2.metric("Mínimo", f"{estat['mínimo']:.2f}")
+        col3.metric("Máximo", f"{estat['máximo']:.2f}")
 
-        # Status
-        if resultado["status"] == "OK":
-            st.success(resultado["mensagem"])
+        # Percentuais dentro/fora da faixa
+        if estat.get("percentual_dentro") is not None:
+            st.caption(
+                f"Dentro da faixa: {estat['percentual_dentro']:.1f}% | "
+                f"Abaixo: {estat['percentual_abaixo']:.1f}% | "
+                f"Acima: {estat['percentual_acima']:.1f}%"
+            )
+
+        # Mensagem interpretativa
+        if r["status"] == "OK":
+            st.success(r["mensagem"])
         else:
-            st.warning(f"⚠️ {resultado['mensagem']}")
+            st.warning(f"⚠️ {r['mensagem']}")
 
         # Faixa ideal
-        faixa = resultado["valores"]["faixa_ideal"]
-        st.caption(f"Faixa ideal: {faixa['min']} a {faixa['max']}")
+        if estat.get("faixa_ideal"):
+            faixa = estat["faixa_ideal"]
+            st.caption(f"Faixa ideal: {faixa['min']} a {faixa['max']}")
