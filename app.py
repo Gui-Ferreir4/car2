@@ -54,11 +54,7 @@ modulos_analise = [
     shrtft1,
     longft1,
     ect_gauge,
-    fuelpw,
-    af_ego_o2,
-    map_sensor,
-    spkdur,
-    lambda_mixture
+    fuelpw, lambda_mixture, map_sensor, spkdur, mistura_loop
 ]  # Lista de módulos ativos
 
 for modulo in modulos_analise:
@@ -67,6 +63,7 @@ for modulo in modulos_analise:
         modulo.exibir(resultado)
 
 st.success("✅ Análise concluída.")
+
 
 
 
