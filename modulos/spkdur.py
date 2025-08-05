@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utilitarios import sanitizar_coluna, calcular_estatisticas, avaliar_status
+from modulos.utilitarios import sanitizar_coluna, calcular_estatisticas, avaliar_status
 
 COLUNAS_SPK = ["SPKDUR_1(ms)", "SPKDUR_2(ms)", "SPKDUR_3(ms)", "SPKDUR_4(ms)"]
 
