@@ -7,11 +7,7 @@ from modulos import (
     shrtft1,
     longft1,
     ect_gauge,
-    fuelpw,
-    af_ego_o2,
-    map_sensor,
-    spkdur
-    #loop_fuelcorr
+    fuelpw#, af_ego_o2, map_sensor, spkdur, loop_fuelcorr
 )
 
 
@@ -71,6 +67,7 @@ for modulo in modulos_analise:
         modulo.exibir(resultado)
 
 st.success("✅ Análise concluída.")
+
 
 
 
