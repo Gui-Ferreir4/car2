@@ -54,9 +54,12 @@ def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: di
         if status == "Alerta":
             resultado["status"] = "Alerta"
 
+        media_val = estat.get('média')
+        media_str = f"{media_val:.2f}" if isinstance(media_val, (int, float)) else "N/A"
+        
         mensagem_campo = (
             f"{campo}: {DESCRICOES.get(campo, '')} "
-            f"Média: {estat.get('média', 'N/A'):.2f} | "
+            f"Média: {media_str} | "
             f"Tempo dentro da faixa ideal: {proporcao*100:.1f}% "
             f"(Faixa ideal: {faixa_ideal if faixa_ideal else 'N/D'})"
         )
