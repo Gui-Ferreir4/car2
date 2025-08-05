@@ -4,6 +4,7 @@ import json
 from modulos import (
     resumo_geral,
     fuellvl,
+    correcao_combustivel,
     shrtft1,
     longft1,
     ect_gauge,
@@ -51,6 +52,7 @@ st.header("3. Análises de Sensores")
 modulos_analise = [
     resumo_geral,
     fuellvl,
+    correcao_combustivel,
     shrtft1,
     longft1,
     ect_gauge,
@@ -63,6 +65,7 @@ for modulo in modulos_analise:
         modulo.exibir(resultado)
 
 st.success("✅ Análise concluída.")
+
 
 
 
