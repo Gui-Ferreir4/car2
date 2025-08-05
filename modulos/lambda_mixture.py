@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utilitarios import sanitizar_coluna, calcular_estatisticas, avaliar_status
+from modulos.utilitarios import sanitizar_coluna, calcular_estatisticas, avaliar_status
 
 def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: dict) -> dict:
     """
