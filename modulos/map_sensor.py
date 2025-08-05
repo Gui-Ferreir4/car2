@@ -47,9 +47,9 @@ def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: di
     serie_volts = sanitizar_coluna(df, "MAP(V)")
     serie_kpa = sanitizar_coluna(df, "MAP.OBDII(kPa)")
 
+    correlacao = None
     if not serie_volts.empty and not serie_kpa.empty:
         correlacao = serie_volts.corr(serie_kpa)
-        resultados["correlacao_V_kPa"] = round(correlacao, 3) if correlacao else None
         if correlacao and correlacao < 0.8:
             mensagens.append("⚠️ MAP: baixa correlação entre V e kPa → possível problema no sensor ou conversão.")
             status_geral = "Alerta"
@@ -58,6 +58,7 @@ def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: di
         "status": status_geral,
         "mensagem": " | ".join(mensagens),
         "valores": resultados,
+        "correlacao_V_kPa": round(correlacao, 3) if correlacao else None
     }
 
 
@@ -81,13 +82,13 @@ def exibir(resultado: dict):
     for coluna, dados in valores.items():
         estat = dados.get("estatisticas", {})
         st.markdown(f"**{coluna}** — Status: {dados.get('status','-')}")
-        if estat["média"] is not None:
+        if estat.get("média") is not None:
             col1, col2, col3 = st.columns(3)
             col1.metric("Média", estat["média"])
             col2.metric("Mínimo", estat["mínimo"])
             col3.metric("Máximo", estat["máximo"])
 
     # Exibir correlação entre V e kPa
-    correlacao = valores.get("correlacao_V_kPa")
+    correlacao = resultado.get("correlacao_V_kPa")
     if correlacao is not None:
         st.caption(f"Correlação MAP(V) x MAP(kPa): {correlacao}")
