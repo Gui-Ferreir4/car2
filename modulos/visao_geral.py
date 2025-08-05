@@ -1,124 +1,116 @@
-import pandas as pd
 import streamlit as st
-from modulos.utilitarios import sanitizar_coluna, calcular_estatisticas
+import pandas as pd
+from modulos.utilitarios import sanitizar_coluna, calcular_estatisticas, avaliar_status
 
-# --- Faixas ideais esperadas para cada sensor ---
-FAIXAS_IDEAL = {
-    "BRK_LVL": (1, 1),        # Sempre 1 (nível OK)
-    "FUEL_RESER": (0, 0),     # 0 = Não acionado
-    "PSP": (0, 0),            # 0 = Sem pressão anormal
-    "ANY_DR_AJ": (0, 0),      # 0 = Nenhuma porta aberta
-    "T_AJAR": (0, 0),         # 0 = Porta-malas fechado
-}
-
+# Descrições breves dos campos
 DESCRICOES = {
-    "BRK_LVL": "Nível do fluido de freio (1=OK, 0=Baixo)",
-    "FUEL_RESER": "Indicador do tanquinho de partida a frio (1=ativo, 0=desligado)",
-    "PSP": "Pressão da direção hidráulica (1=ativa, 0=normal)",
-    "ANY_DR_AJ": "Indica se alguma porta ficou aberta em movimento",
-    "T_AJAR": "Indica porta-malas aberto (1=aberto, 0=fechado)"
+    "BRK_LVL": "Nível do freio (Brake Level) indica pressão ou estado do sistema de freios.",
+    "FUEL_RESER": "Nível do tanquinho de partida a frio.",
+    "PSP ANY_DR_AJ": "Status do sensor de porta (qualquer porta aberta).",
+    "T_AJAR": "Indicador de porta mala aberto."
 }
 
-def analisar(df, modelo=None, combustivel=None, valores_ideais=None):
+def calcular_proporcao_dentro_faixa(serie: pd.Series, faixa: dict) -> float:
+    """Calcula a proporção do tempo em que os valores estão dentro da faixa ideal."""
+    if serie.empty or faixa is None:
+        return 0.0
+    dentro = serie[(serie >= faixa["min"]) & (serie <= faixa["max"])]
+    proporcao = len(dentro) / len(serie) if len(serie) > 0 else 0.0
+    return proporcao
+
+def analisar(df: pd.DataFrame, modelo: str, combustivel: str, valores_ideais: dict) -> dict:
     """
-    Analisa dados gerais da viagem e sensores de segurança.
-    Retorna estatísticas detalhadas e status interpretativo.
+    Analisa os campos da visão geral da viagem:
+    - descrição breve de cada campo,
+    - cálculo de estatísticas,
+    - proporção do tempo dentro da faixa ideal,
+    - status com base nessa proporção (<75% considerado alerta).
     """
+    campos = ["BRK_LVL", "FUEL_RESER", "PSP ANY_DR_AJ", "T_AJAR"]
     resultado = {
         "status": "OK",
         "mensagem": "",
-        "resumo_viagem": {},
-        "sensores": {}
+        "valores": {}
     }
+    mensagens = []
 
-    # --- 1. Dados gerais da viagem ---
-    distancia_km = None
-    if "TRIP_ODOM(km)" in df.columns:
-        trip = sanitizar_coluna(df, "TRIP_ODOM(km)")
-        if not trip.empty:
-            distancia_km = trip.max() - trip.min()
-    elif "ODOMETER(km)" in df.columns:
-        odom = sanitizar_coluna(df, "ODOMETER(km)")
-        if not odom.empty:
-            distancia_km = odom.max() - odom.min()
-
-    duracao_s = None
-    if "time(ms)" in df.columns:
-        duracao_s = (df["time(ms)"].max() - df["time(ms)"].min()) / 1000.0
-
-    vel_series = sanitizar_coluna(df, "IC_SPDMTR(km/h)")
-    rpm_series = sanitizar_coluna(df, "RPM")
-
-    resultado["resumo_viagem"] = {
-        "Distância (km)": round(distancia_km, 2) if distancia_km else None,
-        "Duração (h)": round(duracao_s / 3600, 2) if duracao_s else None,
-        "Velocidade Média": round(vel_series.mean(), 2) if not vel_series.empty else None,
-        "Velocidade Máx": round(vel_series.max(), 2) if not vel_series.empty else None,
-        "RPM Médio": round(rpm_series.mean(), 0) if not rpm_series.empty else None,
-        "RPM Máx": round(rpm_series.max(), 0) if not rpm_series.empty else None
-    }
-
-    # --- 2. Sensores / Atuadores ---
-    for campo, faixa in FAIXAS_IDEAL.items():
+    for campo in campos:
         serie = sanitizar_coluna(df, campo)
-        if serie.empty:
-            resultado["sensores"][campo] = {
-                "descricao": DESCRICOES.get(campo, ""),
-                "status": "erro",
-                "mensagem": f"Sem dados para {campo}",
-                "estatisticas": {}
-            }
-            resultado["status"] = "Alerta"
-            continue
-
-        # Estatísticas básicas
         estat = calcular_estatisticas(serie)
 
-        # Proporção de tempo dentro da faixa
-        dentro = ((serie >= faixa[0]) & (serie <= faixa[1])).sum()
-        total = len(serie)
-        proporcao_dentro = round(dentro / total * 100, 2) if total > 0 else 0
+        # Obter faixa ideal do JSON, se disponível
+        faixa_ideal = None
+        try:
+            faixa = valores_ideais.get(modelo.lower(), {}).get(combustivel.lower(), {}).get(campo)
+            if faixa and isinstance(faixa, list) and len(faixa) == 2:
+                faixa_ideal = {"min": faixa[0], "max": faixa[1]}
+        except Exception:
+            faixa_ideal = None
 
-        # Status
-        if proporcao_dentro >= 75:
-            status = "OK"
-        elif proporcao_dentro >= 50:
-            status = "Alerta"
-            resultado["status"] = "Alerta"
-        else:
-            status = "Crítico"
+        proporcao = calcular_proporcao_dentro_faixa(serie, faixa_ideal) if faixa_ideal else 0.0
+        status = "OK" if proporcao >= 0.75 else "Alerta"
+
+        # Atualiza status geral se algum campo estiver em alerta
+        if status == "Alerta":
             resultado["status"] = "Alerta"
 
-        resultado["sensores"][campo] = {
+        mensagem_campo = (
+            f"{campo}: {DESCRICOES.get(campo, '')} "
+            f"Média: {estat.get('média', 'N/A'):.2f} | "
+            f"Tempo dentro da faixa ideal: {proporcao*100:.1f}% "
+            f"(Faixa ideal: {faixa_ideal if faixa_ideal else 'N/D'})"
+        )
+        mensagens.append(mensagem_campo)
+
+        resultado["valores"][campo] = {
             "descricao": DESCRICOES.get(campo, ""),
-            "status": status,
-            "proporcao_dentro_%": proporcao_dentro,
-            "estatisticas": estat
+            "estatisticas": estat,
+            "faixa_ideal": faixa_ideal,
+            "proporcao_dentro_%": round(proporcao * 100, 2),
+            "status": status
         }
 
-    # Monta mensagem geral
-    status_sensores = [f"{c}: {v['status']}" for c, v in resultado["sensores"].items()]
-    resultado["mensagem"] = " | ".join(status_sensores)
-
+    resultado["mensagem"] = "\n".join(mensagens)
     return resultado
 
+
 def exibir(resultado: dict):
-    """Exibe visão geral da viagem no Streamlit"""
     st.subheader("🚗 Visão Geral da Viagem")
 
-    # --- Resumo da Viagem ---
-    st.markdown("### 📊 Dados da Viagem")
-    colunas = st.columns(len(resultado["resumo_viagem"]))
-    for i, (k, v) in enumerate(resultado["resumo_viagem"].items()):
-        colunas[i].metric(k, v if v is not None else "N/A")
+    valores = resultado.get("valores", {})
+    status_geral = resultado.get("status", "OK")
 
-    # --- Sensores ---
-    st.markdown("### 🔹 Sensores e Atuadores Críticos")
-    for campo, dados in resultado["sensores"].items():
-        st.markdown(f"**{campo}** — {dados['descricao']}")
-        if dados["status"] == "OK":
-            st.success(f"{dados['status']} — {dados['proporcao_dentro_%']}% dentro da faixa ideal")
-        elif dados["status"] == "Alerta":
-            st.warning(f"{dados['status']} — {dados['proporcao_dentro_%']}% dentro da faixa ideal")
+    for campo, dados in valores.items():
+        st.markdown(f"### {campo}")
+        st.write(dados.get("descricao", ""))
+        estat = dados.get("estatisticas", {})
+        faixa = dados.get("faixa_ideal", None)
+        proporcao = dados.get("proporcao_dentro_%", None)
+        status = dados.get("status", "OK")
+
+        # Exibe estatísticas básicas se disponíveis
+        if estat and estat.get("média") is not None:
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Média", f"{estat['média']:.2f}")
+            col2.metric("Mínimo", f"{estat['mínimo']:.2f}")
+            col3.metric("Máximo", f"{estat['máximo']:.2f}")
         else:
-            st.error(f"{dados['status']} — {dados['proporcao_dentro_%']}% dentro da faixa ideal")
+            st.write("Sem dados numéricos válidos.")
+
+        # Exibe faixa ideal e proporção dentro da faixa
+        if faixa:
+            st.caption(f"Faixa ideal: {faixa['min']} a {faixa['max']}")
+        if proporcao is not None:
+            st.caption(f"Tempo dentro da faixa ideal: {proporcao}%")
+
+        # Mensagem de status
+        if status == "OK":
+            st.success("Status: OK")
+        else:
+            st.warning("⚠️ Status: Alerta — menos de 75% do tempo dentro da faixa ideal")
+
+    # Mensagem geral no topo
+    if status_geral == "Alerta":
+        st.warning("⚠️ Atenção: Alguns parâmetros apresentam mais de 25% do tempo fora da faixa ideal.")
+    else:
+        st.success("✅ Todos os parâmetros estão dentro do esperado na maior parte do tempo.")
