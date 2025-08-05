@@ -15,6 +15,11 @@
       "SPARKADV": [10, 40],
       "LOAD.OBDII": [15, 35],
       "FUELLVL": [10, 100],
+      "FUELPW": [2.0, 6.0],
+      "LAMBDA_1": [0.98, 1.02],
+      "FUEL_CORR": [0.95, 1.05],
+      "AF_LEARN": [0.95, 1.05],
+      "SPKDUR_ms": [1.0, 3.0],
       "consumo_minimo_kml": 10.5
     },
     "etanol": {
@@ -32,6 +37,11 @@
       "SPARKADV": [10, 38],
       "LOAD.OBDII": [15, 35],
       "FUELLVL": [10, 100],
+      "FUELPW": [3.0, 8.0],
+      "LAMBDA_1": [0.98, 1.02],
+      "FUEL_CORR": [0.90, 1.10],
+      "AF_LEARN": [0.90, 1.10],
+      "SPKDUR_ms": [1.0, 3.0],
       "consumo_minimo_kml": 7.5
     },
     "flex": {
@@ -49,8 +59,12 @@
       "SPARKADV": [10, 39],
       "LOAD.OBDII": [15, 35],
       "FUELLVL": [10, 100],
+      "FUELPW": [2.5, 7.0],
+      "LAMBDA_1": [0.98, 1.02],
+      "FUEL_CORR": [0.92, 1.08],
+      "AF_LEARN": [0.92, 1.08],
+      "SPKDUR_ms": [1.0, 3.0],
       "consumo_minimo_kml": 9.0
     }
   }
 }
-
