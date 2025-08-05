@@ -19,7 +19,7 @@ DESCRICOES = {
     "T_AJAR": "Indica porta-malas aberto (1=aberto, 0=fechado)"
 }
 
-def analisar(df: pd.DataFrame) -> dict:
+def analisar(df, modelo=None, combustivel=None, valores_ideais=None):
     """
     Analisa dados gerais da viagem e sensores de segurança.
     Retorna estatísticas detalhadas e status interpretativo.
