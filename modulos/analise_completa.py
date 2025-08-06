@@ -144,6 +144,9 @@ def exportar_json(resultado: dict, caminho_arquivo: str = "analise_completa.json
         print(f"Erro ao exportar JSON: {e}")
         return False
 
+def analisar(df, modelo=None, combustivel=None, valores_ideais=None):
+    """Alias para manter compatibilidade com o app principal."""
+    return analisar_dataframe_completo(df, valores_ideais)
 
 def exibir_streamlit(resultado: dict):
     """
