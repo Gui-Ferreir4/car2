@@ -148,6 +148,10 @@ def analisar(df, modelo=None, combustivel=None, valores_ideais=None):
     """Alias para manter compatibilidade com o app principal."""
     return analisar_dataframe_completo(df, valores_ideais)
 
+def exibir(resultado):
+    """Alias para manter compatibilidade com o app principal."""
+    return exibir_streamlit(resultado)
+
 def exibir_streamlit(resultado: dict):
     """
     Exibe o JSON estruturado no Streamlit de forma organizada.
