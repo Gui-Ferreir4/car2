@@ -161,37 +161,48 @@ def exibir_streamlit(resultado: dict):
             st.error(dados["mensagem"])
             continue
 
+        # -------------------------------
         # Para dados numéricos
+        # -------------------------------
         if dados["tipo"] == "numerico":
             estat = dados.get("estatisticas", {})
             top3 = dados.get("top3_valores", [])
-            comportamento = dados.get("comportamento", {})
+            comportamento = dados.get("comportamento", [])
 
             # Estatísticas básicas em 3 colunas
             c1, c2, c3 = st.columns(3)
-            c1.metric("Média", f"{estat.get('média', 'N/A'):.2f}" if estat.get("média") is not None else "N/A")
-            c2.metric("Mínimo", f"{estat.get('mínimo', 'N/A'):.2f}" if estat.get("mínimo") is not None else "N/A")
-            c3.metric("Máximo", f"{estat.get('máximo', 'N/A'):.2f}" if estat.get("máximo") is not None else "N/A")
+            c1.metric("Média", f"{estat.get('media', 'N/A'):.2f}" if estat.get("media") is not None else "N/A")
+            c2.metric("Mínimo", f"{estat.get('minimo', 'N/A'):.2f}" if estat.get("minimo") is not None else "N/A")
+            c3.metric("Máximo", f"{estat.get('maximo', 'N/A'):.2f}" if estat.get("maximo") is not None else "N/A")
 
             # Top 3 valores
             if top3:
                 st.caption("Top 3 valores mais frequentes:")
-                for valor, perc in top3:
-                    st.write(f"- {valor} → {perc:.1f}%")
+                for item in top3:
+                    st.write(f"- {item['valor']} → {item['percentual']:.1f}%")
 
             # Comportamento
-            st.caption(f"🔍 Comportamento: {comportamento}")
+            if comportamento:
+                st.caption("🔍 Comportamento detectado:")
+                for obs in comportamento:
+                    st.write(f"- {obs}")
 
+        # -------------------------------
         # Para dados categóricos
+        # -------------------------------
         elif dados["tipo"] == "categorico":
             top3 = dados.get("top3_valores", [])
-            comportamento = dados.get("comportamento", {})
+            comportamento = dados.get("comportamento", [])
 
             if top3:
                 st.caption("Top 3 valores mais frequentes:")
-                for valor, perc in top3:
-                    st.write(f"- {valor} → {perc:.1f}%")
+                for item in top3:
+                    st.write(f"- {item['valor']} → {item['percentual']:.1f}%")
 
-            st.caption(f"🔍 Comportamento: {comportamento}")
+            if comportamento:
+                st.caption("🔍 Comportamento detectado:")
+                for obs in comportamento:
+                    st.write(f"- {obs}")
 
         st.markdown("---")
+
