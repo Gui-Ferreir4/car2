@@ -770,6 +770,13 @@ def exibir_analise_streamlit(resultado: dict):
             st.markdown("---")
             continue
 
+
+def analisar(df, modelo=None, combustivel=None, valores_ideais=None):
+    return analisar_todas_colunas(df)
+
+def exibir(resultado):
+    exibir_analise_streamlit(resultado)
+
         # Se não entrou em nenhum caso acima, mostrar todos os pares chave:valor do dict
         for k, v in dados.items():
             if k != "Descrição":
