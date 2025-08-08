@@ -88,7 +88,7 @@ def analisar_fuellvl(df: pd.DataFrame, capacidade_tanque=55.0):
 # Análise principal por coluna
 # =========================
 
-def analisar(df: pd.DataFrame) -> dict:
+def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=None) -> dict:
     resultado = {}
 
     # ---- 1. Tempo da viagem
