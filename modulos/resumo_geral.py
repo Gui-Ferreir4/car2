@@ -126,7 +126,7 @@ def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=Non
     # ODOMETER(km)
     if "ODOMETER(km)" in df.columns:
         col = pd.to_numeric(df["ODOMETER(km)"], errors='coerce').dropna()
-        if len(col) > 0:
+        if not col.empty:
             ini = float(col.min())
             fim = float(col.max())
             resultado["ODOMETER(km)"] = {
