@@ -1,5 +1,5 @@
 # =========================
-# Imports e configuração do Streamlit
+# Imports e configuração
 # =========================
 import pandas as pd
 import numpy as np
@@ -14,12 +14,14 @@ st.set_page_config(page_title="Análise de Dados OBD", layout="wide")
 # =========================
 
 def winsorizada(serie: pd.Series, limite=0.05):
-    serie_clean = serie.dropna()
+    """Aplica winsorização para reduzir impacto de outliers."""
+    serie_clean = pd.to_numeric(serie, errors='coerce').dropna()
     if serie_clean.empty:
         return None
     return pd.Series(mstats.winsorize(serie_clean, limits=limite))
 
 def estatisticas(serie: pd.Series) -> dict:
+    """Calcula min, mediana, max e média winsorizada."""
     dados = pd.to_numeric(serie, errors='coerce').dropna()
     if dados.empty:
         return {
@@ -32,47 +34,61 @@ def estatisticas(serie: pd.Series) -> dict:
 
     winsor = winsorizada(dados)
     return {
-        "min": round(dados.min(), 2),
-        "mediana": round(dados.median(), 2),
-        "max": round(dados.max(), 2),
-        "media_winsorizada": round(winsor.mean(), 2) if winsor is not None else None
+        "min": arredondar_seguro(dados.min()),
+        "mediana": arredondar_seguro(dados.median()),
+        "max": arredondar_seguro(dados.max()),
+        "media_winsorizada": arredondar_seguro(winsor.mean()) if winsor is not None else None
     }
 
 def top3_frequentes(serie: pd.Series) -> list:
+    """Retorna os 3 valores mais frequentes com percentual."""
     dados = pd.to_numeric(serie, errors='coerce').dropna()
     if dados.empty:
         return []
-
     freq = dados.round(2).value_counts(normalize=True).head(3) * 100
     return [
         {"valor": k, "percentual": round(v, 2)} for k, v in freq.items()
     ]
 
 def percentual_valores(serie: pd.Series, valores_esperados: list[str]) -> dict:
+    """Calcula percentual de ocorrência de cada valor esperado."""
     serie = serie.dropna().astype(str).str.upper()
     total = len(serie)
     resultado = {}
-
     for v in valores_esperados:
         resultado[v] = round((serie == v).sum() / total * 100, 2) if total > 0 else 0.0
-
-    # identificar valores fora do esperado
     inesperados = set(serie.unique()) - set([v.upper() for v in valores_esperados])
     if inesperados:
         resultado["Valores inesperados"] = list(inesperados)
-
     return resultado
 
+def arredondar_seguro(valor, casas=2):
+    """Arredonda sem quebrar quando valor é NaN."""
+    try:
+        if pd.notna(valor):
+            return round(float(valor), casas)
+        return None
+    except:
+        return None
+
 def analisar_fuellvl(df: pd.DataFrame, capacidade_tanque=55.0):
+    """Analisa nível de combustível com winsorização + suavização."""
     if "FUELLVL(%)" not in df.columns:
         return {"mensagem": "Coluna ausente"}
 
-    col = df["FUELLVL(%)"].dropna()
+    # Converte para numérico
+    col = pd.to_numeric(df["FUELLVL(%)"], errors='coerce').dropna()
     if col.empty:
-        return {"mensagem": "Sem dados"}
+        return {"mensagem": "Sem dados válidos"}
+
+    # Evita erro se não houver dados suficientes
+    if len(col) < 2:
+        return {"mensagem": "Poucos dados para análise"}
 
     # Winsoriza e suaviza
-    col_clip = col.clip(lower=col.quantile(0.05), upper=col.quantile(0.95))
+    q_low = col.quantile(0.05)
+    q_high = col.quantile(0.95)
+    col_clip = col.clip(lower=q_low, upper=q_high)
     col_suav = uniform_filter1d(col_clip.values, size=5, mode="nearest")
 
     ini_pct = np.mean(col_suav[:10])
@@ -82,57 +98,48 @@ def analisar_fuellvl(df: pd.DataFrame, capacidade_tanque=55.0):
     consumo = max(ini_l - fim_l, 0)
 
     return {
-        "Valor inicial (%)": round(ini_pct, 2),
-        "Valor final (%)": round(fim_pct, 2),
-        "Volume inicial (L)": round(ini_l, 2),
-        "Volume final (L)": round(fim_l, 2),
-        "Consumo estimado (L)": round(consumo, 2),
+        "Valor inicial (%)": arredondar_seguro(ini_pct),
+        "Valor final (%)": arredondar_seguro(fim_pct),
+        "Volume inicial (L)": arredondar_seguro(ini_l),
+        "Volume final (L)": arredondar_seguro(fim_l),
+        "Consumo estimado (L)": arredondar_seguro(consumo),
         "Observação": "Baseado em média winsorizada + suavização"
     }
-
-def arredondar_seguro(valor, casas=2):
-    try:
-        if pd.notna(valor):
-            return round(float(valor), casas)
-        return None
-    except:
-        return None
 
 # =========================
 # Análise principal por coluna
 # =========================
-
 def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=None) -> dict:
     resultado = {}
+
+    # 1️⃣ Limpeza global: substitui "-" por NaN
     df = df.replace("-", np.nan)
-    
+
     # ---- 1. Tempo da viagem
     if "time(ms)" in df.columns:
-        tempo = df["time(ms)"].max() / 1000
-        h, m, s = int(tempo // 3600), int((tempo % 3600) // 60), int(tempo % 60)
-        resultado["time(ms)"] = {"Tempo da viagem": f"{h:02}:{m:02}:{s:02}"}
+        tempo = pd.to_numeric(df["time(ms)"], errors='coerce').dropna()
+        if not tempo.empty:
+            total_segundos = tempo.max() / 1000
+            h, m, s = int(total_segundos // 3600), int((total_segundos % 3600) // 60), int(total_segundos % 60)
+            resultado["time(ms)"] = {"Tempo da viagem": f"{h:02}:{m:02}:{s:02}"}
+        else:
+            resultado["time(ms)"] = {"mensagem": "Sem dados válidos"}
     else:
         resultado["time(ms)"] = {"mensagem": "Coluna ausente"}
 
     # ---- 2. IC_SPDMTR(km/h)
     if "IC_SPDMTR(km/h)" in df.columns:
-        serie = df["IC_SPDMTR(km/h)"]
-        resultado["IC_SPDMTR(km/h)"] = {
-            **estatisticas(serie)
-        }
+        resultado["IC_SPDMTR(km/h)"] = estatisticas(df["IC_SPDMTR(km/h)"])
     else:
         resultado["IC_SPDMTR(km/h)"] = {"mensagem": "Coluna ausente"}
 
     # ---- 3. RPM(1/min)
     if "RPM(1/min)" in df.columns:
-        serie = df["RPM(1/min)"]
-        resultado["RPM(1/min)"] = {
-            **estatisticas(serie)
-        }
+        resultado["RPM(1/min)"] = estatisticas(df["RPM(1/min)"])
     else:
         resultado["RPM(1/min)"] = {"mensagem": "Coluna ausente"}
 
-    # ODOMETER(km)
+    # ---- 4. ODOMETER(km)
     if "ODOMETER(km)" in df.columns:
         col = pd.to_numeric(df["ODOMETER(km)"], errors='coerce').dropna()
         if not col.empty:
@@ -150,7 +157,7 @@ def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=Non
 
     # ---- 5. TRIP_ODOM(km)
     if "TRIP_ODOM(km)" in df.columns:
-        col = pd.to_numeric(df["TRIP_ODOM(km)"], errors="coerce").dropna()
+        col = pd.to_numeric(df["TRIP_ODOM(km)"], errors='coerce').dropna()
         if not col.empty:
             ini = col.min()
             fim = col.max()
@@ -160,11 +167,9 @@ def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=Non
                 "Distância (km)": arredondar_seguro(fim - ini) if pd.notna(fim) and pd.notna(ini) else None
             }
         else:
-            resultado["TRIP_ODOM(km)"] = {"mensagem": "Sem dados"}
+            resultado["TRIP_ODOM(km)"] = {"mensagem": "Sem dados numéricos válidos"}
     else:
         resultado["TRIP_ODOM(km)"] = {"mensagem": "Coluna ausente"}
-
-    # Continuação nas próximas colunas...
 
     # ---- 6. ENGI_IDLE
     if "ENGI_IDLE" in df.columns:
