@@ -126,14 +126,17 @@ def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=Non
     # ODOMETER(km)
     if "ODOMETER(km)" in df.columns:
         col = pd.to_numeric(df["ODOMETER(km)"], errors='coerce').dropna()
-        if not col.empty:
-            ini = float(col.min())
-            fim = float(col.max())
-            resultado["ODOMETER(km)"] = {
-                "Início (km)": round(ini, 2),
-                "Fim (km)": round(fim, 2),
-                "Distância (km)": round(fim - ini, 2)
-            }
+        if not col.empty and col.notna().any():
+            ini = col.min()
+            fim = col.max()
+            if pd.notna(ini) and pd.notna(fim):
+                resultado["ODOMETER(km)"] = {
+                    "Início (km)": round(float(ini), 2),
+                    "Fim (km)": round(float(fim), 2),
+                    "Distância (km)": round(float(fim - ini), 2)
+                }
+            else:
+                resultado["ODOMETER(km)"] = {"mensagem": "Sem dados numéricos válidos"}
         else:
             resultado["ODOMETER(km)"] = {"mensagem": "Sem dados numéricos válidos"}
     else:
