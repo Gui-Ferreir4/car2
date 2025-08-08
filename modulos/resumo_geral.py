@@ -90,6 +90,14 @@ def analisar_fuellvl(df: pd.DataFrame, capacidade_tanque=55.0):
         "Observação": "Baseado em média winsorizada + suavização"
     }
 
+def arredondar_seguro(valor, casas=2):
+    try:
+        if pd.notna(valor):
+            return round(float(valor), casas)
+        return None
+    except:
+        return None
+
 # =========================
 # Análise principal por coluna
 # =========================
@@ -126,17 +134,14 @@ def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=Non
     # ODOMETER(km)
     if "ODOMETER(km)" in df.columns:
         col = pd.to_numeric(df["ODOMETER(km)"], errors='coerce').dropna()
-        if not col.empty and col.notna().any():
+        if not col.empty:
             ini = col.min()
             fim = col.max()
-            if pd.notna(ini) and pd.notna(fim):
-                resultado["ODOMETER(km)"] = {
-                    "Início (km)": round(float(ini), 2),
-                    "Fim (km)": round(float(fim), 2),
-                    "Distância (km)": round(float(fim - ini), 2)
-                }
-            else:
-                resultado["ODOMETER(km)"] = {"mensagem": "Sem dados numéricos válidos"}
+            resultado["ODOMETER(km)"] = {
+                "Início (km)": arredondar_seguro(ini),
+                "Fim (km)": arredondar_seguro(fim),
+                "Distância (km)": arredondar_seguro(fim - ini) if pd.notna(fim) and pd.notna(ini) else None
+            }
         else:
             resultado["ODOMETER(km)"] = {"mensagem": "Sem dados numéricos válidos"}
     else:
