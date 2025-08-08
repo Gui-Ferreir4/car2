@@ -104,7 +104,8 @@ def arredondar_seguro(valor, casas=2):
 
 def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=None) -> dict:
     resultado = {}
-
+    df = df.replace("-", np.nan)
+    
     # ---- 1. Tempo da viagem
     if "time(ms)" in df.columns:
         tempo = df["time(ms)"].max() / 1000
@@ -149,14 +150,14 @@ def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=Non
 
     # ---- 5. TRIP_ODOM(km)
     if "TRIP_ODOM(km)" in df.columns:
-        col = df["TRIP_ODOM(km)"].dropna()
+        col = pd.to_numeric(df["TRIP_ODOM(km)"], errors="coerce").dropna()
         if not col.empty:
             ini = col.min()
             fim = col.max()
             resultado["TRIP_ODOM(km)"] = {
-                "Início (km)": round(ini, 2),
-                "Fim (km)": round(fim, 2),
-                "Distância (km)": round(fim - ini, 2)
+                "Início (km)": arredondar_seguro(ini),
+                "Fim (km)": arredondar_seguro(fim),
+                "Distância (km)": arredondar_seguro(fim - ini) if pd.notna(fim) and pd.notna(ini) else None
             }
         else:
             resultado["TRIP_ODOM(km)"] = {"mensagem": "Sem dados"}
