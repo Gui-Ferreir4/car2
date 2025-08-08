@@ -123,12 +123,12 @@ def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=Non
     else:
         resultado["RPM(1/min)"] = {"mensagem": "Coluna ausente"}
 
-    # ---- 4. ODOMETER(km)
+    # ODOMETER(km)
     if "ODOMETER(km)" in df.columns:
         col = pd.to_numeric(df["ODOMETER(km)"], errors='coerce').dropna()
-        if not col.empty:
-            ini = col.min()
-            fim = col.max()
+        if len(col) > 0:
+            ini = float(col.min())
+            fim = float(col.max())
             resultado["ODOMETER(km)"] = {
                 "Início (km)": round(ini, 2),
                 "Fim (km)": round(fim, 2),
@@ -136,6 +136,8 @@ def analisar(df: pd.DataFrame, modelo=None, combustivel=None, valores_ideais=Non
             }
         else:
             resultado["ODOMETER(km)"] = {"mensagem": "Sem dados numéricos válidos"}
+    else:
+        resultado["ODOMETER(km)"] = {"mensagem": "Coluna ausente"}
 
     # ---- 5. TRIP_ODOM(km)
     if "TRIP_ODOM(km)" in df.columns:
