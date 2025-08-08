@@ -2,9 +2,8 @@ import streamlit as st
 import pandas as pd
 import json
 from modulos import (
-    analise_completa,
-    visao_geral,
-    resumo_geral
+    resumo_geral,
+    fuelllvl
 )
 
 
@@ -46,9 +45,8 @@ except Exception as e:
 # --- Executar análises ---
 st.header("3. Análises de Sensores")
 modulos_analise = [
-    analise_completa,
-    visao_geral,
-    resumo_geral
+    resumo_geral,
+    fuelllvl
 ]  # Lista de módulos ativos
 
 for modulo in modulos_analise:
@@ -57,6 +55,7 @@ for modulo in modulos_analise:
         modulo.exibir(resultado)
 
 st.success("✅ Análise concluída.")
+
 
 
 
