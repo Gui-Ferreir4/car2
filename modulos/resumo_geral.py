@@ -20,20 +20,26 @@ def winsorizada(serie: pd.Series, limite=0.05):
     return pd.Series(mstats.winsorize(serie_clean, limits=limite))
 
 def estatisticas(serie: pd.Series) -> dict:
-    dados = serie.dropna()
+    dados = pd.to_numeric(serie, errors='coerce').dropna()
     if dados.empty:
-        return {}
+        return {
+            "min": None,
+            "mediana": None,
+            "max": None,
+            "media_winsorizada": None,
+            "mensagem": "Sem dados válidos"
+        }
 
     winsor = winsorizada(dados)
     return {
         "min": round(dados.min(), 2),
         "mediana": round(dados.median(), 2),
         "max": round(dados.max(), 2),
-        "media_winsorizada": round(winsor.mean(), 2)
+        "media_winsorizada": round(winsor.mean(), 2) if winsor is not None else None
     }
 
 def top3_frequentes(serie: pd.Series) -> list:
-    dados = serie.dropna()
+    dados = pd.to_numeric(serie, errors='coerce').dropna()
     if dados.empty:
         return []
 
