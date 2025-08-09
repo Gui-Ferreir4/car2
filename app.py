@@ -41,13 +41,12 @@ except Exception as e:
 # --- Executar análises ---
 st.header("3. Análises de Sensores")
 
-# Resumo Geral
-with st.expander("🔎 RESUMO GERAL"):
-    resultado_resumo = resumo_geral.analisar(df, modelo, combustivel, valores_ideais)
-    resumo_geral.exibir(resultado_resumo)
+with st.expander("🔎 RESUMO_GERAL"):
+    resultado = resumo_geral.analisar(df, modelo, combustivel, valores_ideais)
+    resumo_geral.exibir(resultado)
 
-# Gráficos de Linha
-with st.expander("📈 GRÁFICOS DE LINHA"):
+with st.expander("📈 GRAFICOS_LINHA"):
     graficos_linha.exibir(df)
 
 st.success("✅ Análise concluída.")
+
