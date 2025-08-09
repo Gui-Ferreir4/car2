@@ -1,9 +1,11 @@
-# modulos/graficos_linha.py
+# =========================
+# Módulo: graficos_linha.py
+# =========================
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Lista de campos para gerar gráficos
+# Lista de campos que terão gráfico
 CAMPOS_GRAFICOS = [
     "IC_SPDMTR(km/h)",
     "RPM(1/min)",
@@ -17,6 +19,7 @@ CAMPOS_GRAFICOS = [
 ]
 
 def exibir(df: pd.DataFrame):
+    """Exibe gráficos de linha para os campos definidos."""
     st.subheader("📈 Gráficos de Linha dos Sensores")
 
     if "time(ms)" not in df.columns:
@@ -24,7 +27,7 @@ def exibir(df: pd.DataFrame):
         return
 
     # Converter tempo para segundos
-    tempo_segundos = df["time(ms)"] / 1000
+    tempo_segundos = pd.to_numeric(df["time(ms)"], errors="coerce") / 1000
     df_graficos = df.copy()
     df_graficos["Tempo (s)"] = tempo_segundos
 
@@ -33,11 +36,13 @@ def exibir(df: pd.DataFrame):
             st.warning(f"Coluna '{campo}' ausente no arquivo CSV.")
             continue
 
-        serie = pd.to_numeric(df[campo], errors='coerce').dropna()
-        if serie.empty:
+        # Converter para numérico, ignorando valores inválidos
+        serie = pd.to_numeric(df[campo], errors="coerce")
+        if serie.dropna().empty:
             st.warning(f"Sem dados numéricos válidos para '{campo}'.")
             continue
 
+        # Criar gráfico
         fig = px.line(
             df_graficos,
             x="Tempo (s)",
