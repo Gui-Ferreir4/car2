@@ -1,8 +1,9 @@
-import pandas as pd
+# modulos/graficos_linha.py
 import streamlit as st
+import pandas as pd
 import plotly.express as px
 
-# Lista de campos e rótulos
+# Lista de campos para gerar gráficos
 CAMPOS_GRAFICOS = [
     "IC_SPDMTR(km/h)",
     "RPM(1/min)",
@@ -15,41 +16,34 @@ CAMPOS_GRAFICOS = [
     "ECT(°C)"
 ]
 
-def preparar_tempo(df: pd.DataFrame):
-    """Converte time(ms) para tempo em minutos ou formato HH:MM:SS"""
+def exibir(df: pd.DataFrame):
+    st.subheader("📈 Gráficos de Linha dos Sensores")
+
     if "time(ms)" not in df.columns:
-        return pd.Series(range(len(df)), name="Tempo")
-    
-    tempo_seg = pd.to_numeric(df["time(ms)"], errors="coerce") / 1000
-    tempo_fmt = tempo_seg.apply(lambda x: f"{int(x//3600):02}:{int((x%3600)//60):02}:{int(x%60):02}" if pd.notna(x) else None)
-    return tempo_fmt
+        st.error("A coluna 'time(ms)' não foi encontrada no arquivo. Não é possível gerar gráficos de linha.")
+        return
 
-def exibir_graficos(df: pd.DataFrame):
-    st.subheader("📊 Gráficos de Linha - Diagnóstico OBD")
-
-    tempo = preparar_tempo(df)
+    # Converter tempo para segundos
+    tempo_segundos = df["time(ms)"] / 1000
+    df_graficos = df.copy()
+    df_graficos["Tempo (s)"] = tempo_segundos
 
     for campo in CAMPOS_GRAFICOS:
         if campo not in df.columns:
-            st.warning(f"Coluna '{campo}' ausente nos dados.")
+            st.warning(f"Coluna '{campo}' ausente no arquivo CSV.")
             continue
 
-        serie = pd.to_numeric(df[campo], errors="coerce")
-        if serie.dropna().empty:
-            st.info(f"Sem dados numéricos válidos para '{campo}'.")
+        serie = pd.to_numeric(df[campo], errors='coerce').dropna()
+        if serie.empty:
+            st.warning(f"Sem dados numéricos válidos para '{campo}'.")
             continue
-
-        dados_plot = pd.DataFrame({
-            "Tempo": tempo,
-            campo: serie
-        })
 
         fig = px.line(
-            dados_plot,
-            x="Tempo",
+            df_graficos,
+            x="Tempo (s)",
             y=campo,
-            title=f"Evolução de {campo} ao longo do tempo",
-            labels={"Tempo": "Tempo (HH:MM:SS)", campo: campo}
+            title=f"{campo} ao longo do tempo",
+            labels={"Tempo (s)": "Tempo (segundos)", campo: campo},
+            template="plotly_white"
         )
-        fig.update_layout(height=400)
         st.plotly_chart(fig, use_container_width=True)
