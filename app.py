@@ -49,10 +49,11 @@ modulos_analise = [
 
 for modulo in modulos_analise:
     with st.expander(f"🔎 {modulo.__name__.split('.')[-1].upper()}"):
-        resultado = modulo.analisar(df, modelo, combustivel, valores_ideais)
+        resultado = resumo_geral.analisar(df, modelo, combustivel, valores_ideais)
         modulo.exibir(resultado)
 
 st.success("✅ Análise concluída.")
+
 
 
 
